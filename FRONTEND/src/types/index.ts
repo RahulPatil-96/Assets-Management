@@ -12,12 +12,9 @@ export interface User {
 
 export interface Asset {
   id: string;
-  assetTag: string;
   name: string;
   category: 'IT Equipment' | 'Laboratory Equipment' | 'Furniture' | 'Vehicles' | 'Library Resources' | 'Sports Equipment' | 'Medical Equipment' | 'Audio Visual' | 'Security Equipment' | 'Maintenance Equipment';
-  subCategory: string;
   make: string;
-  model: string;
   serialNumber: string;
   barcode?: string;
   qrCode?: string;
@@ -25,23 +22,16 @@ export interface Asset {
   // Financial Information
   purchaseDate: Date;
   purchaseCost: number;
-  currentValue: number;
-  depreciationRate: number;
-  salvageValue: number;
 
   // Location and Assignment
-  building: string;
   room: string;
-  department: string;
   assignedTo?: string;
-  custodian: string;
 
   // Status and Condition
-  status: 'active' | 'maintenance' | 'retired' | 'disposed' | 'missing' | 'reserved';
+  status: 'active' | 'maintenance' | 'retired' | 'disposed' | 'missing' | 'reserved' | 'approved';
   condition: 'excellent' | 'good' | 'fair' | 'poor' | 'needs_repair';
 
   // Warranty and Maintenance
-  warrantyProvider?: string;
   warrantyExpiry?: Date;
   lastMaintenance?: Date;
   nextMaintenance?: Date;
@@ -59,21 +49,16 @@ export interface Asset {
   auditTrail: AuditRecord[];
 
   // Lifecycle
-  expectedLifespan: number; // in years
   disposalDate?: Date;
   disposalMethod?: string;
 
   // Additional Fields
-  notes?: string;
   tags: string[];
   createdAt: Date;
   updatedAt: Date;
   createdBy: string;
   updatedBy: string;
 
-  // Added missing properties
-  location: string;
-  utilizationScore: number;
   predictedEOL?: Date;
 }
 

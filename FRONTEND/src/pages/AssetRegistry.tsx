@@ -51,10 +51,35 @@ export const AssetRegistry: React.FC = () => {
     'Sports Equipment', 'Medical Equipment', 'Audio Visual', 'Security Equipment', 'Maintenance Equipment'
   ];
 
+  // Predefined departments for when there are no existing assets
+  const validDepartments = [
+    'General', 'Finance', 'HR', 'Legal', 'Procurement', 'Facilities', 'IT', 'Maintenance', 'Security', 'Administration'
+  ];
+
   const getValidCategory = (category: string): Asset['category'] | undefined => {
     return validCategories.find(c => c === category);
   };
-  const [formData, setFormData] = useState<Partial<Asset>>({});
+  const [formData, setFormData] = useState<Partial<Asset>>({
+    status: 'active',
+    condition: 'good',
+    purchaseCost: 0,
+    maintenanceSchedule: {
+      frequency: 'annual',
+      intervalDays: 365,
+      nextDue: new Date(Date.now() + 365 * 24 * 60 * 60 * 1000),
+      isOverdue: false,
+      maintenanceType: 'preventive',
+      estimatedCost: 100,
+      requiredSkills: []
+    },
+    maintenanceHistory: [],
+    specifications: {},
+    photos: [],
+    transferHistory: [],
+    tags: [],
+    createdBy: 'Current User',
+    updatedBy: 'Current User'
+  });
 
   // Filter and search assets
   const filteredAssets = useMemo(() => {
@@ -66,16 +91,16 @@ export const AssetRegistry: React.FC = () => {
     });
   }, [searchAssets, searchQuery, filters]);
 
-  // Get unique values for filters
-  const categories = Array.from(new Set(assets.map(asset => asset.category)));
-  const departments = Array.from(new Set(assets.map(asset => asset.department)));
-  const statuses = ['active', 'maintenance', 'retired', 'disposed', 'missing', 'reserved'];
+  // Get unique values for filters, with fallback to predefined values when there are no assets
+  const categories = Array.from(new Set(assets.map(asset => asset.category))).filter(Boolean);
+  const departments = Array.from(new Set(assets.map(asset => asset.department))).filter(Boolean);
+  const statuses = ['active', 'maintenance', 'retired', 'disposed', 'missing', 'reserved', 'approved'];
   const conditions = ['excellent', 'good', 'fair', 'poor', 'needs_repair'];
 
-  const handleAddAsset = (e: React.FormEvent) => {
+  const handleAddAsset = async (e: React.FormEvent) => {
     e.preventDefault();
 
-    if (!formData.name || !formData.category || !formData.department || !formData.assetTag) {
+    if (!formData.name || !formData.category) {
       error('Validation Error', 'Please fill in all required fields');
       return;
     }
@@ -88,24 +113,17 @@ export const AssetRegistry: React.FC = () => {
     }
 
     try {
-      const newAsset = addAsset({
+      const newAsset = await addAsset({
         name: formData.name!,
         category: validCategory,
-        subCategory: formData.subCategory || 'General',
         make: formData.make || 'Unknown',
-        model: formData.model || 'Unknown',
         serialNumber: formData.serialNumber || `SN${Date.now()}`,
         purchaseDate: formData.purchaseDate || new Date(),
         purchaseCost: formData.purchaseCost || 0,
-        currentValue: formData.currentValue || formData.purchaseCost || 0,
-        depreciationRate: formData.depreciationRate || 0.1,
-        salvageValue: formData.salvageValue || 0,
-        building: formData.building || 'Main Building',
         room: formData.room || '100',
-        department: formData.department!,
-        custodian: formData.custodian || 'Unassigned',
         status: formData.status as Asset['status'] || 'active',
         condition: formData.condition as Asset['condition'] || 'good',
+        warrantyExpiry: formData.warrantyExpiry,
         maintenanceSchedule: {
           frequency: 'annual',
           intervalDays: 365,
@@ -117,22 +135,37 @@ export const AssetRegistry: React.FC = () => {
         },
         maintenanceHistory: [],
         specifications: formData.specifications || {},
-        documents: [],
         photos: [],
         transferHistory: [],
-        expectedLifespan: formData.expectedLifespan || 10,
-        notes: formData.notes,
         tags: formData.tags || [],
         createdBy: 'Current User',
         updatedBy: 'Current User',
-        location: formData.location || `${formData.building || 'Main Building'} - ${formData.room || '100'}`,
-        utilizationScore: formData.utilizationScore || 0,
         predictedEOL: formData.predictedEOL
       });
 
       success('Asset Added', `${newAsset.name} has been added to the registry`);
       setShowAddModal(false);
-      setFormData({});
+      setFormData({
+        status: 'active',
+        condition: 'good',
+        purchaseCost: 0,
+        maintenanceSchedule: {
+          frequency: 'annual',
+          intervalDays: 365,
+          nextDue: new Date(Date.now() + 365 * 24 * 60 * 60 * 1000),
+          isOverdue: false,
+          maintenanceType: 'preventive',
+          estimatedCost: 100,
+          requiredSkills: []
+        },
+        maintenanceHistory: [],
+        specifications: {},
+        photos: [],
+        transferHistory: [],
+        tags: [],
+        createdBy: 'Current User',
+        updatedBy: 'Current User'
+      });
     } catch (err) {
       error('Error', 'Failed to add asset');
     }
@@ -183,8 +216,6 @@ export const AssetRegistry: React.FC = () => {
         return <AlertTriangle className="w-4 h-4 text-yellow-500" />;
       case 'reserved':
         return <Eye className="w-4 h-4 text-blue-500" />;
-      case 'approved':
-        return <CheckCircle className="w-4 h-4 text-green-700" />;
       default:
         return <Package className="w-4 h-4 text-gray-500" />;
     }
@@ -204,8 +235,6 @@ export const AssetRegistry: React.FC = () => {
         return 'bg-yellow-100 text-yellow-800 border-yellow-200';
       case 'reserved':
         return 'bg-blue-100 text-blue-800 border-blue-200';
-      case 'approved':
-        return 'bg-green-200 text-green-900 border-green-300';
       default:
         return 'bg-gray-100 text-gray-800 border-gray-200';
     }
@@ -314,16 +343,16 @@ export const AssetRegistry: React.FC = () => {
 
           {/* Filters */}
           <div className="mt-4 grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 pt-4 border-t border-gray-200">
-<select
-  value={filters.category}
-  onChange={(e) => {
-    const validCategory = getValidCategory(e.target.value);
-    setFilters({ ...filters, category: validCategory || 'all' });
-  }}
-  className="block w-full border-gray-300 rounded-lg shadow-sm focus:ring-blue-500 focus:border-blue-500"
->
+            <select
+              value={filters.category}
+              onChange={(e) => {
+                const validCategory = getValidCategory(e.target.value);
+                setFilters({ ...filters, category: validCategory || 'all' });
+              }}
+              className="block w-full border-gray-300 rounded-lg shadow-sm focus:ring-blue-500 focus:border-blue-500"
+            >
               <option value="all">All Categories</option>
-              {categories.map(category => (
+              {(categories.length > 0 ? categories : validCategories).map(category => (
                 <option key={category} value={category}>{category}</option>
               ))}
             </select>
@@ -343,7 +372,7 @@ export const AssetRegistry: React.FC = () => {
               className="block w-full border-gray-300 rounded-lg shadow-sm focus:ring-blue-500 focus:border-blue-500"
             >
               <option value="all">All Departments</option>
-              {departments.map(department => (
+              {(departments.length > 0 ? departments : validDepartments).map(department => (
                 <option key={department} value={department}>{department}</option>
               ))}
             </select>
@@ -377,7 +406,7 @@ export const AssetRegistry: React.FC = () => {
               </span>
             </div>
             <div className="text-sm text-gray-500">
-              Total value: {formatCurrency(filteredAssets.reduce((sum, asset) => sum + asset.currentValue, 0))}
+              Total value: {formatCurrency(filteredAssets.reduce((sum, asset) => sum + asset.purchaseCost, 0))}
             </div>
           </div>
         </div>
@@ -407,19 +436,15 @@ export const AssetRegistry: React.FC = () => {
                     
                     <div className="flex items-center space-x-6 text-sm text-gray-600 mb-3">
                       <div className="flex items-center space-x-1">
-                        <span className="font-medium">{asset.make} {asset.model}</span>
+                        <span className="font-medium">{asset.make}</span>
                       </div>
                       <div className="flex items-center space-x-1">
                         <Building className="w-4 h-4" />
-                        <span>{asset.building} - {asset.room}</span>
-                      </div>
-                      <div className="flex items-center space-x-1">
-                        <User className="w-4 h-4" />
-                        <span>{asset.department}</span>
+                        <span>{asset.room}</span>
                       </div>
                       <div className="flex items-center space-x-1">
                         <DollarSign className="w-4 h-4" />
-                        <span>{formatCurrency(asset.currentValue)}</span>
+                        <span>{formatCurrency(asset.purchaseCost)}</span>
                       </div>
                     </div>
 
@@ -443,10 +468,6 @@ export const AssetRegistry: React.FC = () => {
                       <div>
                         <span className="text-gray-600">Purchase Date:</span>
                         <p className="font-medium text-gray-900">{asset.purchaseDate.toLocaleDateString()}</p>
-                      </div>
-                      <div>
-                        <span className="text-gray-600">Custodian:</span>
-                        <p className="font-medium text-gray-900">{asset.custodian}</p>
                       </div>
                       <div>
                         <span className="text-gray-600">Next Maintenance:</span>
@@ -546,16 +567,6 @@ export const AssetRegistry: React.FC = () => {
                       className="mt-1 block w-full border-gray-300 rounded-lg shadow-sm focus:ring-blue-500 focus:border-blue-500"
                     />
                   </div>
-                  <div>
-                    <label className="block text-sm font-medium text-gray-700">Asset Number *</label>
-                    <input
-                      type="text"
-                      required
-                      value={formData.assetTag || ''}
-                      onChange={(e) => setFormData({ ...formData, assetTag: e.target.value })}
-                      className="mt-1 block w-full border-gray-300 rounded-lg shadow-sm focus:ring-blue-500 focus:border-blue-500"
-                    />
-                  </div>
                       <div>
                         <label className="block text-sm font-medium text-gray-700">Category *</label>
 <select
@@ -568,30 +579,19 @@ export const AssetRegistry: React.FC = () => {
   className="mt-1 block w-full border-gray-300 rounded-lg shadow-sm focus:ring-blue-500 focus:border-blue-500"
 >
                           <option value="">Select Category</option>
-                          {categories.map(category => (
+                          {(categories.length > 0 ? categories : validCategories).map(category => (
                             <option key={category} value={category}>{category}</option>
                           ))}
                         </select>
                       </div>
-                      <div className="grid grid-cols-2 gap-4">
-                        <div>
-                          <label className="block text-sm font-medium text-gray-700">Make</label>
-                          <input
-                            type="text"
-                            value={formData.make || ''}
-                            onChange={(e) => setFormData({ ...formData, make: e.target.value })}
-                            className="mt-1 block w-full border-gray-300 rounded-lg shadow-sm focus:ring-blue-500 focus:border-blue-500"
-                          />
-                        </div>
-                        <div>
-                          <label className="block text-sm font-medium text-gray-700">Model</label>
-                          <input
-                            type="text"
-                            value={formData.model || ''}
-                            onChange={(e) => setFormData({ ...formData, model: e.target.value })}
-                            className="mt-1 block w-full border-gray-300 rounded-lg shadow-sm focus:ring-blue-500 focus:border-blue-500"
-                          />
-                        </div>
+                      <div>
+                        <label className="block text-sm font-medium text-gray-700">Make</label>
+                        <input
+                          type="text"
+                          value={formData.make || ''}
+                          onChange={(e) => setFormData({ ...formData, make: e.target.value })}
+                          className="mt-1 block w-full border-gray-300 rounded-lg shadow-sm focus:ring-blue-500 focus:border-blue-500"
+                        />
                       </div>
                       <div>
                         <label className="block text-sm font-medium text-gray-700">Serial Number</label>
@@ -608,45 +608,11 @@ export const AssetRegistry: React.FC = () => {
                     <div className="space-y-4">
                       <h4 className="font-medium text-gray-900">Location & Assignment</h4>
                       <div>
-                        <label className="block text-sm font-medium text-gray-700">Department *</label>
-                        <select
-                          required
-                          value={formData.department || ''}
-                          onChange={(e) => setFormData({ ...formData, department: e.target.value })}
-                          className="mt-1 block w-full border-gray-300 rounded-lg shadow-sm focus:ring-blue-500 focus:border-blue-500"
-                        >
-                          <option value="">Select Department</option>
-                          {departments.map(department => (
-                            <option key={department} value={department}>{department}</option>
-                          ))}
-                        </select>
-                      </div>
-                      <div className="grid grid-cols-2 gap-4">
-                        <div>
-                          <label className="block text-sm font-medium text-gray-700">Building</label>
-                          <input
-                            type="text"
-                            value={formData.building || ''}
-                            onChange={(e) => setFormData({ ...formData, building: e.target.value })}
-                            className="mt-1 block w-full border-gray-300 rounded-lg shadow-sm focus:ring-blue-500 focus:border-blue-500"
-                          />
-                        </div>
-                        <div>
-                          <label className="block text-sm font-medium text-gray-700">Room</label>
-                          <input
-                            type="text"
-                            value={formData.room || ''}
-                            onChange={(e) => setFormData({ ...formData, room: e.target.value })}
-                            className="mt-1 block w-full border-gray-300 rounded-lg shadow-sm focus:ring-blue-500 focus:border-blue-500"
-                          />
-                        </div>
-                      </div>
-                      <div>
-                        <label className="block text-sm font-medium text-gray-700">Custodian</label>
+                        <label className="block text-sm font-medium text-gray-700">Room</label>
                         <input
                           type="text"
-                          value={formData.custodian || ''}
-                          onChange={(e) => setFormData({ ...formData, custodian: e.target.value })}
+                          value={formData.room || ''}
+                          onChange={(e) => setFormData({ ...formData, room: e.target.value })}
                           className="mt-1 block w-full border-gray-300 rounded-lg shadow-sm focus:ring-blue-500 focus:border-blue-500"
                         />
                       </div>
@@ -695,17 +661,6 @@ export const AssetRegistry: React.FC = () => {
                         />
                       </div>
                       <div>
-                        <label className="block text-sm font-medium text-gray-700">Current Value</label>
-                        <input
-                          type="number"
-                          min="0"
-                          step="0.01"
-                          value={formData.currentValue || ''}
-                          onChange={(e) => setFormData({ ...formData, currentValue: parseFloat(e.target.value) || 0 })}
-                          className="mt-1 block w-full border-gray-300 rounded-lg shadow-sm focus:ring-blue-500 focus:border-blue-500"
-                        />
-                      </div>
-                      <div>
                         <label className="block text-sm font-medium text-gray-700">Purchase Date</label>
                         <input
                           type="date"
@@ -717,15 +672,30 @@ export const AssetRegistry: React.FC = () => {
                     </div>
                   </div>
 
-                  {/* Notes */}
+                  {/* Warranty Information */}
                   <div className="mt-6">
-                    <label className="block text-sm font-medium text-gray-700">Notes</label>
-                    <textarea
-                      value={formData.notes || ''}
-                      onChange={(e) => setFormData({ ...formData, notes: e.target.value })}
-                      rows={3}
+                    <h4 className="font-medium text-gray-900 mb-4">Warranty Information</h4>
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700">Warranty Expiry Date</label>
+                      <input
+                        type="date"
+                        value={formData.warrantyExpiry ? formData.warrantyExpiry.toISOString().split('T')[0] : ''}
+                        onChange={(e) => setFormData({ ...formData, warrantyExpiry: e.target.value ? new Date(e.target.value) : undefined })}
+                        className="mt-1 block w-full border-gray-300 rounded-lg shadow-sm focus:ring-blue-500 focus:border-blue-500"
+                      />
+                    </div>
+                  </div>
+
+
+                  {/* Tags */}
+                  <div className="mt-6">
+                    <label className="block text-sm font-medium text-gray-700">Tags</label>
+                    <input
+                      type="text"
+                      value={formData.tags ? formData.tags.join(', ') : ''}
+                      onChange={(e) => setFormData({ ...formData, tags: e.target.value.split(',').map(tag => tag.trim()).filter(tag => tag) })}
                       className="mt-1 block w-full border-gray-300 rounded-lg shadow-sm focus:ring-blue-500 focus:border-blue-500"
-                      placeholder="Additional notes about this asset..."
+                      placeholder="Enter tags separated by commas"
                     />
                   </div>
                 </div>
@@ -814,20 +784,8 @@ export const AssetRegistry: React.FC = () => {
                     <h4 className="font-semibold text-gray-900 mb-4">Location & Assignment</h4>
                     <div className="space-y-3 text-sm">
                       <div className="flex justify-between">
-                        <span className="text-gray-600">Department:</span>
-                        <span className="font-medium">{selectedAsset.department}</span>
-                      </div>
-                      <div className="flex justify-between">
-                        <span className="text-gray-600">Building:</span>
-                        <span className="font-medium">{selectedAsset.building}</span>
-                      </div>
-                      <div className="flex justify-between">
                         <span className="text-gray-600">Room:</span>
                         <span className="font-medium">{selectedAsset.room}</span>
-                      </div>
-                      <div className="flex justify-between">
-                        <span className="text-gray-600">Custodian:</span>
-                        <span className="font-medium">{selectedAsset.custodian}</span>
                       </div>
                       {selectedAsset.assignedTo && (
                         <div className="flex justify-between">
@@ -847,18 +805,8 @@ export const AssetRegistry: React.FC = () => {
                         <span className="font-medium">{formatCurrency(selectedAsset.purchaseCost)}</span>
                       </div>
                       <div className="flex justify-between">
-                        <span className="text-gray-600">Current Value:</span>
-                        <span className="font-medium">{formatCurrency(selectedAsset.currentValue)}</span>
-                      </div>
-                      <div className="flex justify-between">
                         <span className="text-gray-600">Purchase Date:</span>
                         <span className="font-medium">{selectedAsset.purchaseDate.toLocaleDateString()}</span>
-                      </div>
-                      <div className="flex justify-between">
-                        <span className="text-gray-600">Depreciation:</span>
-                        <span className="font-medium text-red-600">
-                          -{formatCurrency(selectedAsset.purchaseCost - selectedAsset.currentValue)}
-                        </span>
                       </div>
                       {selectedAsset.warrantyExpiry && (
                         <div className="flex justify-between">
@@ -933,15 +881,6 @@ export const AssetRegistry: React.FC = () => {
                   </div>
                 </div>
 
-                {/* Notes */}
-                {selectedAsset.notes && (
-                  <div className="mt-8">
-                    <h4 className="font-semibold text-gray-900 mb-4">Notes</h4>
-                    <div className="bg-yellow-50 border border-yellow-200 rounded-lg p-4">
-                      <p className="text-gray-700">{selectedAsset.notes}</p>
-                    </div>
-                  </div>
-                )}
               </div>
             </div>
           </div>

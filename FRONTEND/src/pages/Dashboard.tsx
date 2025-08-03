@@ -1,9 +1,8 @@
 import React from 'react';
 import { 
   Package, TrendingUp, AlertTriangle, DollarSign, RefreshCw, Activity,
-  Wrench, Calendar, Building, Shield, CheckCircle, XCircle, Eye, Bell,
-  Clock
-} from 'lucide-react';
+  Wrench, Calendar, Building
+  } from 'lucide-react';
 import {
   XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer,
   PieChart, Pie, Cell, BarChart, Bar
@@ -11,7 +10,6 @@ import {
 import { useAssets } from '../hooks/useAssets';
 import { useDashboard } from '../hooks/useDashboard';
 import { useToast } from '../hooks/useToast';
-import { formatDistanceToNow } from 'date-fns';
 
 const COLORS = ['#3B82F6', '#10B981', '#F59E0B', '#EF4444', '#8B5CF6', '#06B6D4', '#F97316', '#84CC16'];
 
@@ -227,7 +225,7 @@ export const Dashboard: React.FC = () => {
                 outerRadius={80}
                 label
               >
-                {metrics.assetsByDepartment.map((_, index) => (
+                {metrics.assetsByDepartment.map((_: DepartmentMetric, index: number) => (
                   <Cell key={index} fill={COLORS[index % COLORS.length]} />
                 ))}
               </Pie>

@@ -1,5 +1,6 @@
 const express = require('express');
 const router = express.Router();
+const authenticate = require('../middleware/authenticate');
 const {
   createItem,
   getItems,
@@ -8,14 +9,14 @@ const {
   deleteItem,
 } = require('../controllers/inventoryController');
 
-router.post('/', createItem);
+router.post('/', authenticate, createItem);
 
-router.get('/', getItems);
+router.get('/', authenticate, getItems);
 
-router.get('/:id', getItemById);
+router.get('/:id', authenticate, getItemById);
 
-router.put('/:id', updateItem);
+router.put('/:id', authenticate, updateItem);
 
-router.delete('/:id', deleteItem);
+router.delete('/:id', authenticate, deleteItem);
 
 module.exports = router;

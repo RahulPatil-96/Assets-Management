@@ -3,7 +3,25 @@ const { v4: uuidv4 } = require('uuid');
 
 // Create inventory item
 const createItem = async (req, res) => {
-  const { name, invoice_no, description, lab, issue, current_status, photo_url } = req.body;
+  const { 
+    name, 
+    description, 
+    lab, 
+    issue, 
+    current_status, 
+    category,
+    make,
+    serial_number,
+    purchase_date,
+    purchase_cost,
+    condition_status,
+    warranty_expiry,
+    status
+  } = req.body;
+
+  // Format date fields if they exist
+  const formattedPurchaseDate = purchase_date ? new Date(purchase_date) : null;
+  const formattedWarrantyExpiry = warranty_expiry ? new Date(warranty_expiry) : null;
 
   try {
     const item_id = uuidv4();
@@ -11,14 +29,30 @@ const createItem = async (req, res) => {
     const { data, error } = await supabase
       .from('inventory')
       .insert([
-        { item_id, name, invoice_no, description, lab, issue, current_status, photo_url },
-      ]);
+        { 
+          item_id, 
+          name, 
+          description, 
+          lab, 
+          issue, 
+          current_status: status || current_status, 
+          category,
+          make,
+          serial_number,
+          purchase_date: formattedPurchaseDate,
+          purchase_cost,
+          condition_status,
+          warranty_expiry: formattedWarrantyExpiry
+        },
+      ])
+      .select()
+      .single();
 
     if (error) {
       return res.status(500).json({ error: error.message });
     }
 
-    res.status(201).json({ item_id, data });
+    res.status(201).json(data);
   } catch (err) {
     res.status(500).json({ error: err.message });
   }
@@ -63,19 +97,64 @@ const getItemById = async (req, res) => {
 
 const updateItem = async (req, res) => {
   const { id } = req.params;
-  const { name, invoice_no, description, lab, issue, current_status, photo_url } = req.body;
+  const { 
+    name, 
+    description, 
+    lab, 
+    issue, 
+    current_status, 
+    category,
+    make,
+    serial_number,
+    purchase_date,
+    purchase_cost,
+    condition_status,
+    warranty_expiry,
+    status
+  } = req.body;
+
+  // Format date fields if they exist
+  const formattedPurchaseDate = purchase_date ? new Date(purchase_date) : null;
+  const formattedWarrantyExpiry = warranty_expiry ? new Date(warranty_expiry) : null;
 
   try {
+    // First get the existing item to ensure it exists
+    const { data: existingData, error: existingError } = await supabase
+      .from('inventory')
+      .select('*')
+      .eq('item_id', id)
+      .single();
+
+    if (existingError) {
+      return res.status(404).json({ message: 'Item not found' });
+    }
+
+    // Update the item
     const { data, error } = await supabase
       .from('inventory')
-      .update({ name, invoice_no, description, lab, issue, current_status, photo_url })
-      .eq('item_id', id);
+      .update({ 
+        name, 
+        description, 
+        lab, 
+        issue, 
+        current_status: status || current_status, 
+        category,
+        make,
+        serial_number,
+        purchase_date: formattedPurchaseDate,
+        purchase_cost,
+        condition_status,
+        warranty_expiry: formattedWarrantyExpiry
+      })
+      .eq('item_id', id)
+      .select()
+      .single();
 
     if (error) {
       return res.status(500).json({ error: error.message });
     }
 
-    res.json({ message: 'Item updated', data });
+    res.json(data);
   } catch (err) {
     res.status(500).json({ error: err.message });
   }
@@ -88,13 +167,15 @@ const deleteItem = async (req, res) => {
     const { data, error } = await supabase
       .from('inventory')
       .delete()
-      .eq('item_id', id);
+      .eq('item_id', id)
+      .select()
+      .single();
 
     if (error) {
       return res.status(500).json({ error: error.message });
     }
 
-    res.json({ message: 'Item deleted' });
+    res.json({ message: 'Item deleted', data });
   } catch (err) {
     res.status(500).json({ error: err.message });
   }

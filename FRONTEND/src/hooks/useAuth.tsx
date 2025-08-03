@@ -1,9 +1,10 @@
 import { useState, useEffect, createContext, useContext } from 'react';
 import { User } from '../types';
+import AuthService, { LoginData, AuthResponse } from '../services/authService';
 
 interface AuthContextType {
   user: User | null;
-  login: (email: string, password: string) => Promise<boolean>;
+  login: (name: string, password: string) => Promise<boolean>;
   logout: () => void;
   isLoading: boolean;
   isAuthenticated: boolean;
@@ -11,59 +12,6 @@ interface AuthContextType {
 }
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
-
-const mockUsers: Record<string, User> = {
-  'admin@university.edu': {
-    id: '1',
-    name: 'Dr. Sarah Johnson',
-    email: 'admin@university.edu',
-    role: 'admin',
-    department: 'Administration',
-    permissions: ['*'],
-    lastLogin: new Date(),
-    isActive: true
-  },
-  'dept.head@university.edu': {
-    id: '2',
-    name: 'Prof. Michael Chen',
-    email: 'dept.head@university.edu',
-    role: 'department_head',
-    department: 'Computer Science',
-    permissions: ['assets:read', 'assets:request', 'reports:view', 'maintenance:request'],
-    lastLogin: new Date(),
-    isActive: true
-  },
-  'maintenance@university.edu': {
-    id: '3',
-    name: 'John Smith',
-    email: 'maintenance@university.edu',
-    role: 'maintenance_staff',
-    department: 'Facilities',
-    permissions: ['assets:read', 'maintenance:read', 'maintenance:write', 'maintenance:schedule'],
-    lastLogin: new Date(),
-    isActive: true
-  },
-  'finance@university.edu': {
-    id: '4',
-    name: 'Lisa Brown',
-    email: 'finance@university.edu',
-    role: 'finance',
-    department: 'Finance',
-    permissions: ['assets:read', 'reports:view', 'budget:read', 'depreciation:view'],
-    lastLogin: new Date(),
-    isActive: true
-  },
-  'it@university.edu': {
-    id: '5',
-    name: 'David Wilson',
-    email: 'it@university.edu',
-    role: 'it_team',
-    department: 'IT Services',
-    permissions: ['assets:read', 'assets:write', 'it_assets:manage', 'reports:view'],
-    lastLogin: new Date(),
-    isActive: true
-  }
-};
 
 export const useAuth = (): AuthContextType => {
   const [user, setUser] = useState<User | null>(null);
@@ -74,34 +22,55 @@ export const useAuth = (): AuthContextType => {
     const savedUser = localStorage.getItem('current_user');
 
     if (token && savedUser) {
-      setTimeout(() => {
-        setUser(JSON.parse(savedUser));
-        setIsLoading(false);
-      }, 1000);
-    } else {
-      setIsLoading(false);
+      try {
+        const parsedUser = JSON.parse(savedUser);
+        // Convert date strings back to Date objects
+        if (parsedUser.lastLogin) {
+          parsedUser.lastLogin = new Date(parsedUser.lastLogin);
+        }
+        setUser(parsedUser);
+      } catch (e) {
+        console.error('Error parsing user data from localStorage', e);
+        localStorage.removeItem('auth_token');
+        localStorage.removeItem('current_user');
+      }
     }
+    setIsLoading(false);
   }, []);
 
-  const login = async (email: string, password: string): Promise<boolean> => {
+  const login = async (name: string, password: string): Promise<boolean> => {
     setIsLoading(true);
-    await new Promise(resolve => setTimeout(resolve, 1000));
+    
+    try {
+      const loginData: LoginData = { name, password };
+      const response: AuthResponse = await AuthService.login(loginData);
+      
+      // Map backend user to frontend User type
+      const frontendUser: User = {
+        id: response.user.user_id,
+        name: response.user.name,
+        email: `${response.user.name}@university.edu`, // Placeholder email
+        role: mapBackendRoleToFrontendRole(response.user.role),
+        department: getDepartmentFromRole(response.user.role),
+        permissions: getPermissionsFromRole(response.user.role),
+        lastLogin: new Date(),
+        isActive: true
+      };
 
-    const user = mockUsers[email];
-    if (user && password === 'password') {
-      const updatedUser = { ...user, lastLogin: new Date() };
-      localStorage.setItem('auth_token', 'mock_token');
-      localStorage.setItem('current_user', JSON.stringify(updatedUser));
-      setUser(updatedUser);
+      AuthService.setToken(response.token);
+      localStorage.setItem('current_user', JSON.stringify(frontendUser));
+      setUser(frontendUser);
       setIsLoading(false);
       return true;
+    } catch (error) {
+      console.error('Login error:', error);
+      setIsLoading(false);
+      return false;
     }
-
-    setIsLoading(false);
-    return false;
   };
 
   const logout = () => {
+    AuthService.removeToken();
     localStorage.removeItem('auth_token');
     localStorage.removeItem('current_user');
     setUser(null);
@@ -109,8 +78,44 @@ export const useAuth = (): AuthContextType => {
 
   const hasPermission = (permission: string): boolean => {
     if (!user) return false;
-    if (user.permissions.includes('*')) return true;
-    return user.permissions.includes(permission);
+    // For now, we'll give all permissions to all users
+    // In a real application, this would be based on the user's role
+    return true;
+  };
+
+  // Helper function to map backend roles to frontend roles
+  const mapBackendRoleToFrontendRole = (backendRole: string): User['role'] => {
+    switch (backendRole) {
+      case 'lab_assistant':
+        return 'staff';
+      case 'assistant professor':
+        return 'department_head';
+      case 'hod':
+        return 'department_head';
+      default:
+        return 'staff';
+    }
+  };
+
+  // Helper function to get department from role
+  const getDepartmentFromRole = (role: string): string => {
+    switch (role) {
+      case 'lab_assistant':
+        return 'Laboratory';
+      case 'assistant professor':
+        return 'Academic';
+      case 'hod':
+        return 'Administration';
+      default:
+        return 'General';
+    }
+  };
+
+  // Helper function to get permissions from role
+  const getPermissionsFromRole = (role: string): string[] => {
+    // For now, we'll give all permissions to all users
+    // In a real application, this would be based on the user's role
+    return ['*'];
   };
 
   return {

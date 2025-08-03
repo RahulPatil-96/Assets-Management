@@ -9,6 +9,9 @@ import { Header } from './components/Header';
 import { LoginForm } from './components/LoginForm';
 import { Sidebar } from './components/Sidebar';
 import { HelpCenter } from './components/HelpCenter';
+import { Signin } from './pages/signin';
+import { Signup } from './pages/signup';
+import { ForgotPassword } from './pages/forgot-password';
 
 const LoadingScreen: React.FC = () => (
   <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-blue-50 to-purple-50">
@@ -35,7 +38,7 @@ const PrivateRoute: React.FC = () => {
   }
 
   if (!isAuthenticated) {
-    return <Navigate to="/login" replace />;
+    return <Navigate to="/signin" replace />;
   }
 
   return <Outlet />;
@@ -85,8 +88,11 @@ const AppContent: React.FC = () => {
         <main className="flex-1 min-h-screen p-4">
           <Routes>
             <Route path="/login" element={<LoginForm />} />
+            <Route path="/signin" element={<Signin />} />
+            <Route path="/signup" element={<Signup />} />
+            <Route path="/forgot-password" element={<ForgotPassword />} />
             <Route element={<PrivateRoute />}>
-              <Route path="/" element={<Dashboard />} />
+              <Route path="/dashboard" element={<Dashboard />} />
               <Route path="/assets" element={<AssetRegistry />} />
               <Route
                 path="/settings"
@@ -99,8 +105,9 @@ const AppContent: React.FC = () => {
                   </div>
                 }
               />
-              <Route path="*" element={<Navigate to="/" replace />} />
+              <Route path="*" element={<Navigate to="/dashboard" replace />} />
             </Route>
+            <Route path="/" element={<Navigate to="/signin" replace />} />
           </Routes>
         </main>
 

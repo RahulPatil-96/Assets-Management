@@ -10,12 +10,17 @@ CREATE TABLE users (
 CREATE TABLE inventory (
   item_id UUID PRIMARY KEY,
   name TEXT NOT NULL,
-  invoice_no TEXT,
   description TEXT,
   lab TEXT,
   issue VARCHAR(50),
   current_status VARCHAR(50),
-  photo_url VARCHAR(50)
+  category VARCHAR(100),
+  make VARCHAR(100),
+  serial_number VARCHAR(100),
+  purchase_date DATE,
+  purchase_cost DECIMAL(10, 2),
+  condition_status VARCHAR(50),
+  warranty_expiry DATE
 );
 
 -- Create repair table
