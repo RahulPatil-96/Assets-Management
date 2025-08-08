@@ -114,6 +114,7 @@ export function Signup() {
                   <option className="bg-gray-800 text-white" value="lab_assistant">Lab Assistant</option>
                   <option className="bg-gray-800 text-white" value="assistant professor">Assistant Professor</option>
                   <option className="bg-gray-800 text-white" value="hod">Head of Department</option>
+                  <option className="bg-gray-800 text-white" value="admin">Admin</option>
                 </select>
               </div>
             </div>

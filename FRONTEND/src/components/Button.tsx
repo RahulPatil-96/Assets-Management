@@ -15,6 +15,7 @@ interface ButtonProps {
   onClick?: React.MouseEventHandler<HTMLButtonElement>;
   fullWidth?: boolean;
   loading?: boolean;
+  className?: string;
 }
 
 export function Button({
@@ -24,6 +25,7 @@ export function Button({
   onClick,
   fullWidth,
   loading,
+  className = "",
 }: ButtonProps) {
   return (
     <button
@@ -33,7 +35,8 @@ export function Button({
         " " +
         defaultStyles +
         (fullWidth ? " w-full" : "") +
-        (loading ? " opacity-50 cursor-not-allowed" : " cursor-pointer")
+        (loading ? " opacity-50 cursor-not-allowed" : " cursor-pointer") +
+        (className ? " " + className : "")
       }
       disabled={loading}
       aria-busy={loading}

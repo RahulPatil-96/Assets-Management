@@ -19,65 +19,107 @@ const getDefaultHeaders = (includeAuth: boolean = true) => {
   if (includeAuth) {
     const token = getToken();
     if (token) {
-      headers['Authorization'] = token;
+      headers['Authorization'] = `Bearer ${token}`;
     }
   }
 
   return headers;
 };
 
-export const api = {
-  get: async (endpoint: string, includeAuth: boolean = true) => {
-    const response = await fetch(`${API_BASE_URL}${endpoint}`, {
-      headers: getDefaultHeaders(includeAuth),
-    });
-    return handleResponse(response);
-  },
-
-  post: async (endpoint: string, data: any, includeAuth: boolean = true) => {
-    const response = await fetch(`${API_BASE_URL}${endpoint}`, {
-      method: 'POST',
-      headers: getDefaultHeaders(includeAuth),
-      body: JSON.stringify(data),
-    });
-    return handleResponse(response);
-  },
-
-  put: async (endpoint: string, data: any, includeAuth: boolean = true) => {
-    const response = await fetch(`${API_BASE_URL}${endpoint}`, {
-      method: 'PUT',
-      headers: getDefaultHeaders(includeAuth),
-      body: JSON.stringify(data),
-    });
-    return handleResponse(response);
-  },
-
-  delete: async (endpoint: string, includeAuth: boolean = true) => {
-    const response = await fetch(`${API_BASE_URL}${endpoint}`, {
-      method: 'DELETE',
-      headers: getDefaultHeaders(includeAuth),
-    });
-    return handleResponse(response);
-  },
-};
-
+// Enhanced error handling with more detailed error messages
 const handleResponse = async (response: Response) => {
   const contentType = response.headers.get('content-type');
+  
   if (contentType && contentType.includes('application/json')) {
     const data = await response.json();
     if (!response.ok) {
-      const error: ApiError = new Error(response.statusText);
+      const error: ApiError = new Error(data.message || response.statusText);
       error.status = response.status;
       error.data = data;
+      
+      // Log detailed error for debugging
+      console.error('API Error:', {
+        status: response.status,
+        statusText: response.statusText,
+        endpoint: response.url,
+        data
+      });
+      
       throw error;
     }
     return data;
   } else {
+    const text = await response.text();
     if (!response.ok) {
-      const error: ApiError = new Error(response.statusText);
+      const error: ApiError = new Error(text || response.statusText);
       error.status = response.status;
       throw error;
     }
-    return response.text();
+    return text;
   }
+};
+
+export const api = {
+  get: async (endpoint: string, includeAuth: boolean = true) => {
+    try {
+      const response = await fetch(`${API_BASE_URL}${endpoint}`, {
+        headers: getDefaultHeaders(includeAuth),
+      });
+      return await handleResponse(response);
+    } catch (error) {
+      console.error('GET request failed:', error);
+      throw error;
+    }
+  },
+
+  post: async (endpoint: string, data: any, includeAuth: boolean = true) => {
+    try {
+      const response = await fetch(`${API_BASE_URL}${endpoint}`, {
+        method: 'POST',
+        headers: getDefaultHeaders(includeAuth),
+        body: JSON.stringify(data),
+      });
+      return await handleResponse(response);
+    } catch (error) {
+      console.error('POST request failed:', error);
+      throw error;
+    }
+  },
+
+  put: async (endpoint: string, data: any, includeAuth: boolean = true) => {
+    try {
+      const response = await fetch(`${API_BASE_URL}${endpoint}`, {
+        method: 'PUT',
+        headers: getDefaultHeaders(includeAuth),
+        body: JSON.stringify(data),
+      });
+      return await handleResponse(response);
+    } catch (error) {
+      console.error('PUT request failed:', error);
+      throw error;
+    }
+  },
+
+  delete: async (endpoint: string, includeAuth: boolean = true) => {
+    try {
+      const response = await fetch(`${API_BASE_URL}${endpoint}`, {
+        method: 'DELETE',
+        headers: getDefaultHeaders(includeAuth),
+      });
+      return await handleResponse(response);
+    } catch (error) {
+      console.error('DELETE request failed:', error);
+      throw error;
+    }
+  },
+};
+
+// Utility function to check if user is authenticated
+export const isAuthenticated = (): boolean => {
+  return !!getToken();
+};
+
+// Utility function to clear authentication
+export const clearAuth = (): void => {
+  localStorage.removeItem('auth_token');
 };

@@ -16,36 +16,56 @@ const comparePassword = async (enteredPassword, storedPassword) => {
 const signup = async (req, res) => {
   const { name, role, password } = req.body;
 
-  if (!['lab_assistant', 'assistant professor', 'hod'].includes(role)) {
+  // Validate role
+  const validRoles = ['lab_assistant', 'assistant professor', 'hod', 'admin'];
+  if (!validRoles.includes(role)) {
     return res.status(400).json({ message: 'Invalid role' });
   }
 
+  // Validate password
   if (!password || password.length < 6) {
     return res.status(400).json({ message: 'Password must be at least 6 characters long' });
   }
 
+  // Validate name
+  if (!name || name.trim().length === 0) {
+    return res.status(400).json({ message: 'Name is required' });
+  }
+
   try {
     const user_id = uuidv4();
-
     const hashedPassword = await hashPassword(password);
+    
+    // Generate email from name (or use provided email if available)
+    const email = `${name.toLowerCase().replace(/\s+/g, '.')}@temp.com`;
 
-    try {
-      const { data, error } = await supabase
-        .from('users')
-        .insert([{ user_id, name, role, password: hashedPassword }]);
+    const { data, error } = await supabase
+      .from('users')
+      .insert([{ 
+        user_id, 
+        name: name.trim(), 
+        email, 
+        role, 
+        password: hashedPassword 
+      }])
+      .select('user_id, name, role')
+      .single();
 
-      if (error) {
-        console.error('Supabase insert error:', error);
-        return res.status(500).json({ error: error.message, details: error });
+    if (error) {
+      console.error('Supabase insert error:', error);
+      
+      // Handle duplicate email/name errors
+      if (error.code === '23505') {
+        return res.status(409).json({ message: 'User already exists' });
       }
-
-      res.status(201).json({ user_id, name, role });
-    } catch (fetchError) {
-      console.error('Fetch error during supabase insert:', fetchError);
-      return res.status(500).json({ error: 'Fetch error during supabase insert', details: fetchError.message });
+      
+      return res.status(500).json({ message: 'Failed to create user', error: error.message });
     }
+
+    res.status(201).json(data);
   } catch (error) {
-    res.status(500).json({ error: error.message });
+    console.error('Signup error:', error);
+    res.status(500).json({ message: 'Internal server error', error: error.message });
   }
 };
 
