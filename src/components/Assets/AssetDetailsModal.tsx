@@ -144,17 +144,39 @@ const AssetDetailsModal: React.FC<AssetDetailsModalProps> = ({ asset, onClose })
               </div>
             </div>
 
-            {asset.approved && (
-              <div className="space-y-2">
-                <h3 className="text-sm font-medium text-gray-500 dark:text-gray-400">Approval Details</h3>
-                <div className="space-y-1">
-                  <p className="text-sm"><span className="font-medium">Approved By:</span> {asset.approver?.name || 'Unknown'}</p>
-                  {asset.approved_at && (
-                    <p className="text-sm"><span className="font-medium">Approved At:</span> {new Date(asset.approved_at).toLocaleDateString()}</p>
-                  )}
-                </div>
+            <div className="space-y-2">
+              <h3 className="text-sm font-medium text-gray-500 dark:text-gray-400">Approval Details</h3>
+              <div className="space-y-1">
+                {asset.approved_by && (
+                  <p className="text-sm">
+                    <span className="font-medium">HOD Approved By:</span> {asset.approver?.name || 'Unknown'}
+                    {asset.approved_at && (
+                      <span className="text-gray-500 dark:text-gray-400 ml-2">
+                        ({new Date(asset.approved_at).toLocaleDateString()})
+                      </span>
+                    )}
+                  </p>
+                )}
+                {asset.approved_by_faculty && (
+                  <p className="text-sm">
+                    <span className="font-medium">Faculty Approved By:</span> {asset.approver_faculty?.name || 'Unknown'}
+                    {asset.approved_at_faculty && (
+                      <span className="text-gray-500 dark:text-gray-400 ml-2">
+                        ({new Date(asset.approved_at_faculty).toLocaleDateString()})
+                      </span>
+                    )}
+                  </p>
+                )}
+                {!asset.approved_by && !asset.approved_by_faculty && (
+                  <p className="text-sm text-gray-500 dark:text-gray-400">Pending approval</p>
+                )}
+                {asset.approved && (
+                  <p className="text-sm text-green-600 dark:text-green-400 font-medium">
+                    ✓ Fully Approved
+                  </p>
+                )}
               </div>
-            )}
+            </div>
           </div>
         </div>
 

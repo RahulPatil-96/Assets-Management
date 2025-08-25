@@ -26,6 +26,7 @@ export interface LabStaff {
 }
 
 export interface LabIssue {
+  remark?: string; // Added remark field
   id: string;
   lab_id: string;
   title: string;
@@ -88,6 +89,7 @@ export interface UpdateLabIssueRequest {
   priority?: 'low' | 'medium' | 'high' | 'urgent';
   assigned_to?: string;
   status?: 'open' | 'in_progress' | 'resolved' | 'closed';
+  remark?: string; // Added remark field
 }
 
 export interface AssignStaffRequest {

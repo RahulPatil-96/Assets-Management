@@ -41,10 +41,13 @@ export interface Asset {
   approved: boolean;
   approved_by?: string;
   approved_at?: string;
+  approved_by_faculty?: string;
+  approved_at_faculty?: string;
   created_at: string;
   updated_at: string;
   creator?: UserProfile;
   approver?: UserProfile;
+  approver_faculty?: UserProfile;
 }
 
 export interface AssetIssue {
@@ -53,6 +56,7 @@ export interface AssetIssue {
   issue_description: string;
   reported_by?: string;
   reported_at: string;
+  remark?: string; // Added remark field
   status: IssueStatus;
   resolved_by?: string;
   resolved_at?: string;

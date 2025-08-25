@@ -1,13 +1,17 @@
 import React, { useState, useEffect } from 'react';
 import { useQuery } from '@tanstack/react-query';
-import { Package, Filter, Plus, Edit, Trash2, CheckCircle, Eye } from 'lucide-react';
+import { Package, Filter, Plus, Edit, Trash2, CheckCircle, Eye, BarChart3 } from 'lucide-react';
 import { useAuth } from '../../contexts/AuthContext';
 import { supabase, Asset } from '../../lib/supabase';
 import { NotificationService } from '../../lib/notificationService';
 import AssetForm from './AssetForm';
 import AssetDetailsModal from './AssetDetailsModal';
+import AssetAnalyticsDashboard from '../Analytics/AssetAnalyticsDashboard';
+import ExportButton from '../Export/ExportButton';
 
 const AssetList: React.FC<{ searchTerm: string }> = ({ searchTerm }) => {
+  const [fromDate, setFromDate] = useState<string>('');
+  const [toDate, setToDate] = useState<string>('');
   const { profile } = useAuth();
   const [filterStatus, setFilterStatus] = useState('all');
   const [filterLab, setFilterLab] = useState('all');
@@ -15,6 +19,7 @@ const AssetList: React.FC<{ searchTerm: string }> = ({ searchTerm }) => {
   const [showForm, setShowForm] = useState(false);
   const [editingAsset, setEditingAsset] = useState<Asset | null>(null);
   const [viewingAsset, setViewingAsset] = useState<Asset | null>(null);
+  const [activeTab, setActiveTab] = useState<'list' | 'analytics'>('list');
 
   const fetchAssets = async (): Promise<Asset[]> => {
     const { data, error } = await supabase
@@ -22,7 +27,8 @@ const AssetList: React.FC<{ searchTerm: string }> = ({ searchTerm }) => {
       .select(`
         *,
         creator:created_by(name, role),
-        approver:approved_by(name, role)
+        approver:approved_by(name, role),
+        approver_faculty:approved_by_faculty(name, role)
       `)
       .order('created_at', { ascending: false });
 
@@ -58,26 +64,51 @@ const AssetList: React.FC<{ searchTerm: string }> = ({ searchTerm }) => {
     };
   }, [refetch]);
 
-  const handleApprove = async (assetId: string) => {
+  const handleApprove = async (assetId: string, asset: Asset) => {
     try {
+      const isHOD = profile?.role === 'HOD';
+      const isFaculty = profile?.role === 'Faculty';
+      
+      let updateData: any = {};
+      
+      if (isHOD) {
+        updateData = {
+          approved_by: profile?.id,
+          approved_at: new Date().toISOString(),
+        };
+        
+        // If faculty has already approved, mark as fully approved
+        if (asset.approved_by_faculty) {
+          updateData.approved = true;
+        }
+      } else if (isFaculty) {
+        updateData = {
+          approved_by_faculty: profile?.id,
+          approved_at_faculty: new Date().toISOString(),
+        };
+        
+        // If HOD has already approved, mark as fully approved
+        if (asset.approved_by) {
+          updateData.approved = true;
+        }
+      }
+
       const { error } = await supabase
         .from('assets')
-        .update({
-          approved: true,
-          approved_by: profile?.id,
-        })
+        .update(updateData)
         .eq('id', assetId);
 
       if (error) throw error;
 
       // Create notification for all users about the approval
       if (profile?.id) {
+        const approvalType = isHOD ? 'HOD' : 'Faculty';
         await NotificationService.createNotificationForAllUsers(
           profile.id,
           'approve',
           'asset',
           assetId,
-          'Asset Approved'
+          `Asset ${approvalType} Approved`
         );
       }
 
@@ -132,7 +163,12 @@ const AssetList: React.FC<{ searchTerm: string }> = ({ searchTerm }) => {
     
     const matchesType = filterType === 'all' || asset.asset_type === filterType;
     
-    return matchesSearch && matchesStatus && matchesLab && matchesType;
+    const assetDate = new Date(asset.date);
+    const from = new Date(fromDate);
+    const to = new Date(toDate);
+    const matchesDate = (!fromDate || assetDate >= from) && (!toDate || assetDate <= to);
+
+    return matchesSearch && matchesStatus && matchesLab && matchesType && matchesDate;
   });
 
   const canEdit = (asset: Asset) => {
@@ -140,7 +176,16 @@ const AssetList: React.FC<{ searchTerm: string }> = ({ searchTerm }) => {
   };
 
   const canApprove = (asset: Asset) => {
-    return profile?.role === 'HOD' && !asset.approved;
+    const isHOD = profile?.role === 'HOD';
+    const isFaculty = profile?.role === 'Faculty';
+    
+    if (isHOD) {
+      return !asset.approved_by && !asset.approved;
+    } else if (isFaculty) {
+      return !asset.approved_by_faculty && !asset.approved;
+    }
+    
+    return false;
   };
 
   const canDelete = (asset: Asset) => {
@@ -166,15 +211,48 @@ const AssetList: React.FC<{ searchTerm: string }> = ({ searchTerm }) => {
     <div className="p-6">
       <div className="flex justify-between items-center mb-6">
         <h1 className="text-2xl font-bold text-gray-900 dark:text-gray-100">Asset Management</h1>
-        {profile?.role === 'Lab Assistant' && (
-          <button
-            onClick={() => setShowForm(true)}
-            className="bg-blue-600 text-white px-4 py-2 rounded-lg hover:bg-blue-700 dark:bg-blue-700 dark:hover:bg-blue-800 flex items-center space-x-2 transition-colors"
-          >
-            <Plus className="w-4 h-4" />
-            <span>Add Asset</span>
-          </button>
-        )}
+        <div className="flex items-center space-x-4">
+          {profile?.role === 'Lab Assistant' && (
+            <button
+              onClick={() => setShowForm(true)}
+              className="bg-blue-600 text-white px-4 py-2 rounded-lg hover:bg-blue-700 dark:bg-blue-700 dark:hover:bg-blue-800 flex items-center space-x-2 transition-colors"
+            >
+              <Plus className="w-4 h-4" />
+              <span>Add Asset</span>
+            </button>
+          )}
+          <ExportButton
+            data={filteredAssets}
+            type="assets"
+            disabled={filteredAssets.length === 0}
+          />
+        </div>
+      </div>
+
+      {/* Tab Navigation */}
+      <div className="flex border-b border-gray-200 dark:border-gray-700 mb-6">
+        <button
+          onClick={() => setActiveTab('list')}
+          className={`px-4 py-2 font-medium text-sm ${
+            activeTab === 'list'
+              ? 'border-b-2 border-blue-500 text-blue-600 dark:text-blue-400'
+              : 'text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-300'
+          }`}
+        >
+          <Package className="w-4 h-4 inline mr-2" />
+          Asset List
+        </button>
+        <button
+          onClick={() => setActiveTab('analytics')}
+          className={`px-4 py-2 font-medium text-sm ${
+            activeTab === 'analytics'
+              ? 'border-b-2 border-blue-500 text-blue-600 dark:text-blue-400'
+              : 'text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-300'
+          }`}
+        >
+          <BarChart3 className="w-4 h-4 inline mr-2" />
+          Analytics
+        </button>
       </div>
 
       {/* Filters */}
@@ -227,80 +305,117 @@ const AssetList: React.FC<{ searchTerm: string }> = ({ searchTerm }) => {
               <option value="other">Other</option>
             </select>
           </div>
+          
+          <div className="flex items-center space-x-2">
+            <label htmlFor="fromDate" className="text-gray-700 dark:text-gray-300 text-sm whitespace-nowrap">From:</label>
+            <input
+              type="date"
+              id="fromDate"
+              value={fromDate}
+              onChange={(e) => setFromDate(e.target.value)}
+              className="px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent dark:bg-gray-700 dark:text-gray-200"
+            />
+          </div>
+          
+          <div className="flex items-center space-x-2">
+            <label htmlFor="toDate" className="text-gray-700 dark:text-gray-300 text-sm whitespace-nowrap">To:</label>
+            <input
+              type="date"
+              id="toDate"
+              value={toDate}
+              onChange={(e) => setToDate(e.target.value)}
+              className="px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent dark:bg-gray-700 dark:text-gray-200"
+            />
+          </div>
         </div>
       </div>
 
-      {/* Assets List */}
-      <div className="bg-white dark:bg-gray-800 rounded-lg shadow-sm border border-gray-200 dark:border-gray-700">
-        {filteredAssets.length === 0 ? (
-          <div className="text-center py-12">
-            <Package className="w-12 h-12 text-gray-300 dark:text-gray-600 mx-auto mb-4" />
-            <p className="text-gray-500 dark:text-gray-300">No assets found</p>
+      {/* Content based on active tab */}
+      {activeTab === 'list' ? (
+        <>
+          {/* Assets List */}
+          <div className="bg-white dark:bg-gray-800 rounded-lg shadow-sm border border-gray-200 dark:border-gray-700">
+            {filteredAssets.length === 0 ? (
+              <div className="text-center py-12">
+                <Package className="w-12 h-12 text-gray-300 dark:text-gray-600 mx-auto mb-4" />
+                <p className="text-gray-500 dark:text-gray-300">No assets found</p>
+              </div>
+            ) : (
+              <div className="overflow-x-auto">
+                <table className="w-full">
+                  <thead className="bg-gray-50 dark:bg-gray-700 border-b border-gray-200 dark:border-gray-600">
+                    <tr>
+                      <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-300 uppercase tracking-wider">Asset</th>
+                      <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-300 uppercase tracking-wider">Details</th>
+                      <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-300 uppercase tracking-wider">Actions</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {filteredAssets.map(asset => (
+                      <tr key={asset.id} className="border-b border-gray-200 dark:border-gray-600">
+                        <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900 dark:text-gray-100">{asset.name_of_supply}</td>
+                        <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500 dark:text-gray-400">
+                          <div>Lab: {asset.allocated_lab}</div>
+                          <div>Type: {asset.asset_type}</div>
+                          <div>
+                            Status: {asset.approved ? 'Fully Approved' : 'Pending Approval'}
+                          </div>
+                          {asset.approved_by && (
+                            <div>HOD Approved: {asset.approver?.name || 'Unknown'}</div>
+                          )}
+                          {asset.approved_by_faculty && (
+                            <div>Faculty Approved: {asset.approver_faculty?.name || 'Unknown'}</div>
+                          )}
+                        </td>
+                        <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-500 dark:text-gray-400">
+                          <div className="flex space-x-2">
+                            <button
+                              onClick={() => handleViewDetails(asset)}
+                              className="text-gray-600 dark:text-gray-400 hover:text-gray-800 dark:hover:text-gray-300"
+                              title="View Details"
+                            >
+                              <Eye className="w-5 h-5" />
+                            </button>
+                            {canEdit(asset) && (
+                              <button
+                                onClick={() => {setEditingAsset(asset); setShowForm(true);}}
+                                className="text-blue-600 dark:text-blue-400 hover:text-blue-800 dark:hover:text-blue-300"
+                                title="Edit Asset"
+                              >
+                                <Edit className="w-5 h-5" />
+                              </button>
+                            )}
+                            {canApprove(asset) && (
+                              <button
+                                onClick={() => handleApprove(asset.id, asset)}
+                                className="text-green-600 dark:text-green-400 hover:text-green-800 dark:hover:text-green-300"
+                                title="Approve Asset"
+                              >
+                                <CheckCircle className="w-5 h-5" />
+                              </button>
+                            )}
+                            {canDelete(asset) && (
+                              <button
+                                onClick={() => handleDelete(asset.id)}
+                                className="text-red-600 dark:text-red-400 hover:text-red-800 dark:hover:text-red-300"
+                                title="Delete Asset"
+                              >
+                                <Trash2 className="w-5 h-5" />
+                              </button>
+                            )}
+                          </div>
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            )}
           </div>
-        ) : (
-          <div className="overflow-x-auto">
-            <table className="w-full">
-              <thead className="bg-gray-50 dark:bg-gray-700 border-b border-gray-200 dark:border-gray-600">
-                <tr>
-                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-300 uppercase tracking-wider">Asset</th>
-                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-300 uppercase tracking-wider">Details</th>
-                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-300 uppercase tracking-wider">Actions</th>
-                </tr>
-              </thead>
-              <tbody>
-                {filteredAssets.map(asset => (
-                  <tr key={asset.id} className="border-b border-gray-200 dark:border-gray-600">
-                    <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900 dark:text-gray-100">{asset.name_of_supply}</td>
-                    <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500 dark:text-gray-400">
-                      <div>Lab: {asset.allocated_lab}</div>
-                      <div>Type: {asset.asset_type}</div>
-                      <div>Status: {asset.approved ? 'Approved' : 'Pending'}</div>
-                    </td>
-                    <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-500 dark:text-gray-400">
-                      <div className="flex space-x-2">
-                        <button
-                          onClick={() => handleViewDetails(asset)}
-                          className="text-gray-600 dark:text-gray-400 hover:text-gray-800 dark:hover:text-gray-300"
-                          title="View Details"
-                        >
-                          <Eye className="w-5 h-5" />
-                        </button>
-                        {canEdit(asset) && (
-                          <button
-                            onClick={() => {setEditingAsset(asset); setShowForm(true);}}
-                            className="text-blue-600 dark:text-blue-400 hover:text-blue-800 dark:hover:text-blue-300"
-                            title="Edit Asset"
-                          >
-                            <Edit className="w-5 h-5" />
-                          </button>
-                        )}
-                        {canApprove(asset) && (
-                          <button
-                            onClick={() => handleApprove(asset.id)}
-                            className="text-green-600 dark:text-green-400 hover:text-green-800 dark:hover:text-green-300"
-                            title="Approve Asset"
-                          >
-                            <CheckCircle className="w-5 h-5" />
-                          </button>
-                        )}
-                        {canDelete(asset) && (
-                          <button
-                            onClick={() => handleDelete(asset.id)}
-                            className="text-red-600 dark:text-red-400 hover:text-red-800 dark:hover:text-red-300"
-                            title="Delete Asset"
-                          >
-                            <Trash2 className="w-5 h-5" />
-                          </button>
-                        )}
-                      </div>
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-        )}
-      </div>
+        </>
+      ) : (
+        <AssetAnalyticsDashboard assets={filteredAssets} />
+      )}
 
       {/* Asset Form Modal */}
       {showForm && (

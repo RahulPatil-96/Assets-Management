@@ -45,6 +45,8 @@ CREATE TABLE assets (
   approved boolean DEFAULT false,
   approved_by uuid REFERENCES user_profiles(id) ON DELETE SET NULL,
   approved_at timestamptz,
+  approved_by_faculty uuid REFERENCES user_profiles(id) ON DELETE SET NULL,
+  approved_at_faculty timestamptz,
   created_at timestamptz DEFAULT now(),
   updated_at timestamptz DEFAULT now()
 );
@@ -59,6 +61,7 @@ CREATE TABLE asset_issues (
   status issue_status DEFAULT 'open',
   resolved_by uuid REFERENCES user_profiles(id) ON DELETE SET NULL,
   resolved_at timestamptz,
+  remark text,
   updated_at timestamptz DEFAULT now()
 );
 
@@ -745,26 +748,31 @@ INSERT INTO user_profiles (auth_id, email, role, name, lab_id) VALUES
 ('61592b47-e1c0-49ce-a5e5-0fc7d7eed86a', 'faculty2@university.edu', 'Faculty', 'Dr. Sarah Miller', 'MECH-LAB-01');
 
 -- Insert sample assets (this will trigger logs and notifications)
-INSERT INTO assets (date, name_of_supply, asset_type, invoice_number, description, quantity, rate, allocated_lab, created_by, approved, approved_by) VALUES
+INSERT INTO assets (date, name_of_supply, asset_type, invoice_number, description, quantity, rate, allocated_lab, created_by, approved, approved_by, approved_by_faculty) VALUES
 ('2024-01-15', 'Dell OptiPlex 7090', 'cpu', 'INV-2024-001', 'Desktop Computer Intel i7, 16GB RAM, 512GB SSD', 10, 75000.00, 'CSE-LAB-01', 
  (SELECT id FROM user_profiles WHERE name = 'Alice Johnson'), true, 
- (SELECT id FROM user_profiles WHERE name = 'Dr. John Smith')),
+ (SELECT id FROM user_profiles WHERE name = 'Dr. John Smith'),
+ (SELECT id FROM user_profiles WHERE name = 'Prof. Robert Williams')),
 
 ('2024-01-20', 'HP LaserJet Pro M404dn', 'printer', 'INV-2024-002', 'Laser Printer Monochrome', 3, 25000.00, 'CSE-LAB-01',
  (SELECT id FROM user_profiles WHERE name = 'Alice Johnson'), true,
- (SELECT id FROM user_profiles WHERE name = 'Dr. John Smith')),
+ (SELECT id FROM user_profiles WHERE name = 'Dr. John Smith'),
+ (SELECT id FROM user_profiles WHERE name = 'Prof. Robert Williams')),
 
 ('2024-01-25', 'Cisco Catalyst 2960-X', 'network', 'INV-2024-003', 'Network Switch 48-port', 2, 45000.00, 'CSE-LAB-01',
  (SELECT id FROM user_profiles WHERE name = 'Alice Johnson'), true,
- (SELECT id FROM user_profiles WHERE name = 'Dr. John Smith')),
+ (SELECT id FROM user_profiles WHERE name = 'Dr. John Smith'),
+ (SELECT id FROM user_profiles WHERE name = 'Prof. Robert Williams')),
 
 ('2024-02-01', 'Logitech C920 HD Pro', 'peripheral', 'INV-2024-004', 'Webcam Full HD 1080p', 15, 8000.00, 'MECH-LAB-01',
  (SELECT id FROM user_profiles WHERE name = 'Bob Davis'), true,
- (SELECT id FROM user_profiles WHERE name = 'Dr. John Smith')),
+ (SELECT id FROM user_profiles WHERE name = 'Dr. John Smith'),
+ (SELECT id FROM user_profiles WHERE name = 'Dr. Sarah Miller')),
 
 ('2024-02-10', 'Arduino Uno R3', 'microcontroller', 'INV-2024-005', 'Microcontroller Board', 50, 1500.00, 'MECH-LAB-01',
  (SELECT id FROM user_profiles WHERE name = 'Bob Davis'), true,
- (SELECT id FROM user_profiles WHERE name = 'Dr. John Smith'));
+ (SELECT id FROM user_profiles WHERE name = 'Dr. John Smith'),
+ (SELECT id FROM user_profiles WHERE name = 'Dr. Sarah Miller'));
 
 -- Insert sample asset issues
 INSERT INTO asset_issues (asset_id, issue_description, reported_by, status) VALUES
