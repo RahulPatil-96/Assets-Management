@@ -10,6 +10,7 @@ import { ForgotPassword } from './components/Auth/forgot-password';
 import { UpdatePassword } from './components/Auth/update-password';
 import Navbar from './components/Layout/Navbar';
 import Sidebar from './components/Layout/Sidebar';
+import { Toaster } from 'react-hot-toast';
 
 // Lazy load components for better performance
 const Dashboard = lazy(() => import('./components/Dashboard/Dashboard'));
@@ -171,6 +172,7 @@ const App: React.FC = () => {
                 <Route path="/signin" element={<LoginForm />} />
                 <Route path="/" element={<MainApp />} />
               </Routes>
+              <Toaster position="top-right" />
             </QueryClientProvider>
           </NotificationProvider>
         </AuthProvider>

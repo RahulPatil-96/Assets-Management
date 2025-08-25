@@ -1,6 +1,7 @@
 import React, { createContext, useContext, useEffect, useState, useRef } from 'react';
 import { supabase } from '../lib/supabase';
 import { sendSupabasePing, shouldSendPing, PingResult } from '../lib/supabasePingService';
+import { toast } from 'react-hot-toast';
 
 interface User {
   id: string;
@@ -341,6 +342,11 @@ const signUp = async (email: string, password: string, metadata?: { name?: strin
 
     if (data?.user) {
       console.log('✅ Auth user created, waiting for email confirmation');
+      // Show success notification
+      toast.success('Confirmation email sent! Please check your inbox to verify your account.', {
+        duration: 5000,
+        position: 'top-right',
+      });
       // Don't try to create profile immediately - wait for email confirmation
       // The profile will be created when the user confirms their email and signs in
     } else if (error) {
