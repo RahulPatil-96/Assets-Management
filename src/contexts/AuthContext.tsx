@@ -358,12 +358,30 @@ const signUp = async (email: string, password: string, metadata?: { name?: strin
 
   const signOut = async () => {
     console.log('🚪 Attempting sign-out...');
-    const { error } = await supabase.auth.signOut();
-    if (error) {
-      console.log('❌ Sign-out failed:', error.message);
+    
+    // Check if we have a valid session before attempting sign-out
+    const { data: { session } } = await supabase.auth.getSession();
+    if (!session) {
+      console.log('⚠️ No active session found - clearing local state only');
+      setUser(null);
+      setProfile(null);
+      return;
+    }
+    
+    try {
+      const { error } = await supabase.auth.signOut();
+      if (error) {
+        console.log('❌ Sign-out failed:', error.message);
+        throw error;
+      } else {
+        console.log('✅ Sign-out successful - session cleared');
+      }
+    } catch (error) {
+      console.log('❌ Sign-out error:', error);
+      // Even if sign-out fails, clear local state to prevent stuck auth
+      setUser(null);
+      setProfile(null);
       throw error;
-    } else {
-      console.log('✅ Sign-out successful - session cleared');
     }
   };
 
