@@ -21,7 +21,7 @@ const AssetList: React.FC<{ searchTerm: string }> = ({ searchTerm }) => {
   const [viewingAsset, setViewingAsset] = useState<Asset | null>(null);
   const [activeTab, setActiveTab] = useState<'list' | 'analytics'>('list');
 
-  const fetchAssets = async (): Promise<Asset[]> => {
+const fetchAssets = async (): Promise<Asset[]> => {
     const { data, error } = await supabase
       .from('assets')
       .select(`
@@ -359,17 +359,23 @@ const AssetList: React.FC<{ searchTerm: string }> = ({ searchTerm }) => {
                         </td>
                         <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900 dark:text-gray-100">{asset.name_of_supply}</td>
                         <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500 dark:text-gray-400">
-                          <div>Lab: {asset.allocated_lab}</div>
-                          <div>Type: {asset.asset_type}</div>
-                          <div>
-                            Status: {asset.approved ? 'Fully Approved' : 'Pending Approval'}
-                          </div>
-                          {asset.approved_by && (
-                            <div>HOD Approved: {asset.approver?.name || 'Unknown'}</div>
-                          )}
-                          {asset.approved_by_lab_incharge && (
-                            <div>Lab Incharge Approved: {asset.approver_lab_incharge?.name || 'Unknown'}</div>
-                          )}
+                        <div>Lab: {asset.allocated_lab}</div>
+                        <div>Type: {asset.asset_type}</div>
+                        <div>
+                          Status: {asset.approved ? 'Fully Approved' : 'Pending Approval'}
+                        </div>
+                        {asset.approved_by && (
+                          <div>HOD Approved: {asset.approver?.name || ''}</div>
+                        )}
+                        {asset.approved_by_lab_incharge && (
+                          <div>Lab Incharge Approved: {asset.approver_lab_incharge?.name || ''}</div>
+                        )}
+                        {asset.created_by && !asset.creator?.name && (
+                          <div>Created by: </div>
+                        )}
+                        {asset.created_by && asset.creator?.name && (
+                          <div>Created by: {asset.creator.name}</div>
+                        )}
                         </td>
                         <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-500 dark:text-gray-400">
                           <div className="flex space-x-2">

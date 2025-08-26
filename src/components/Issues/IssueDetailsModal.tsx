@@ -35,15 +35,15 @@ const IssueDetailsModal: React.FC<IssueDetailsModalProps> = ({ issue, onClose })
 
         if (error) {
           console.error('Error fetching resolver name:', error);
-          setResolverName('Unknown');
+          setResolverName('');
         } else if (resolverData) {
-          setResolverName(resolverData.name || 'Unknown');
+          setResolverName(resolverData.name || '');
         } else {
-          setResolverName('Unknown');
+          setResolverName('');
         }
       } catch (error) {
         console.error('Error fetching resolver name:', error);
-        setResolverName('Unknown');
+        setResolverName('');
       } finally {
         setLoadingResolver(false);
       }
@@ -110,7 +110,7 @@ const IssueDetailsModal: React.FC<IssueDetailsModalProps> = ({ issue, onClose })
             <div className="space-y-2">
               <h3 className="text-sm font-medium text-gray-500 dark:text-gray-400">Reporter Details</h3>
               <div className="space-y-1">
-                <p className="text-sm"><span className="font-medium">Name:</span> {issue.reporter?.name || 'Unknown'}</p>
+                <p className="text-sm"><span className="font-medium">Name:</span> {issue.reporter?.name || ''}</p>
                 <p className="text-sm"><span className="font-medium">Role:</span> {issue.reporter?.role || 'N/A'}</p>
               </div>
             </div>

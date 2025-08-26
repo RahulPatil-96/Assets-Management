@@ -38,7 +38,7 @@ CREATE TABLE assets (
   description text,
   quantity integer NOT NULL CHECK (quantity > 0),
   rate numeric(10,2) NOT NULL CHECK (rate >= 0),
-total_amount numeric(10,2) GENERATED ALWAYS AS (quantity * rate) STORED,
+  total_amount numeric(10,2) GENERATED ALWAYS AS (quantity * rate) STORED,
   asset_id text,
   remark text,
   allocated_lab text NOT NULL,
@@ -46,8 +46,8 @@ total_amount numeric(10,2) GENERATED ALWAYS AS (quantity * rate) STORED,
   approved boolean DEFAULT false,
   approved_by uuid REFERENCES user_profiles(id) ON DELETE SET NULL,
   approved_at timestamptz,
-  approved_by_faculty uuid REFERENCES user_profiles(id) ON DELETE SET NULL,
-  approved_at_faculty timestamptz,
+  approved_by_lab_incharge uuid REFERENCES user_profiles(id) ON DELETE SET NULL,
+  approved_at_lab_incharge timestamptz,
   created_at timestamptz DEFAULT now(),
   updated_at timestamptz DEFAULT now()
 );
@@ -557,9 +557,13 @@ DECLARE
   v_old_data jsonb;
   v_new_data jsonb;
   v_changes jsonb;
+  v_asset_name text;
 BEGIN
   -- Get actor ID from current session
   v_actor_id := auth.uid();
+  
+  -- Get asset name
+  SELECT name_of_supply INTO v_asset_name FROM assets WHERE id = COALESCE(NEW.asset_id, OLD.asset_id);
   
   IF TG_OP = 'INSERT' THEN
     -- Log creation
@@ -569,7 +573,7 @@ BEGIN
       'report',
       'issue',
       NEW.id,
-      'Issue #' || NEW.id::text,
+      COALESCE(v_asset_name, 'Issue #' || NEW.id::text),
       NULL,
       v_new_data,
       NULL,
@@ -590,7 +594,7 @@ BEGIN
         'resolve',
         'issue',
         NEW.id,
-        'Issue #' || NEW.id::text,
+        COALESCE(v_asset_name, 'Issue #' || NEW.id::text),
         v_old_data,
         v_new_data,
         v_changes,
@@ -603,7 +607,7 @@ BEGIN
         'update',
         'issue',
         NEW.id,
-        'Issue #' || NEW.id::text,
+        COALESCE(v_asset_name, 'Issue #' || NEW.id::text),
         v_old_data,
         v_new_data,
         v_changes,
@@ -620,7 +624,7 @@ BEGIN
       'delete',
       'issue',
       OLD.id,
-      'Issue #' || OLD.id::text,
+      COALESCE(v_asset_name, 'Issue #' || OLD.id::text),
       v_old_data,
       NULL,
       NULL,
@@ -761,9 +765,9 @@ ALTER TABLE asset_transfers ENABLE ROW LEVEL SECURITY;
 ALTER TABLE notifications ENABLE ROW LEVEL SECURITY;
 ALTER TABLE activity_logs ENABLE ROW LEVEL SECURITY;
 
--- user_profiles: Users can only see their own profile
-CREATE POLICY user_profiles_select_own ON user_profiles
-  FOR SELECT USING (auth_id = auth.uid());
+-- user_profiles: All authenticated users can see all profiles
+CREATE POLICY user_profiles_select_all ON user_profiles
+  FOR SELECT USING (true);
 CREATE POLICY user_profiles_update_own ON user_profiles
   FOR UPDATE USING (auth_id = auth.uid());
 CREATE POLICY user_profiles_insert_admin ON user_profiles
@@ -816,7 +820,7 @@ INSERT INTO user_profiles (auth_id, email, role, name, lab_id) VALUES
 ('61592b47-e1c0-49ce-a5e5-0fc7d7eed86a', 'labincharge2@university.edu', 'Lab Incharge', 'Dr. Sarah Miller', 'MECH-LAB-01');
 
 -- Insert sample assets (this will trigger logs and notifications)
-INSERT INTO assets (date, name_of_supply, asset_type, invoice_number, description, quantity, rate, allocated_lab, created_by, approved, approved_by, approved_by_faculty, asset_id) VALUES
+INSERT INTO assets (date, name_of_supply, asset_type, invoice_number, description, quantity, rate, allocated_lab, created_by, approved, approved_by, approved_by_lab_incharge, asset_id) VALUES
 ('2024-01-15', 'Dell OptiPlex 7090', 'cpu', 'INV-2024-001', 'Desktop Computer Intel i7, 16GB RAM, 512GB SSD', 10, 75000.00, 'CSE-LAB-01', 
  (SELECT id FROM user_profiles WHERE name = 'Alice Johnson'), true, 
  (SELECT id FROM user_profiles WHERE name = 'Dr. John Smith'),

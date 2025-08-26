@@ -35,7 +35,7 @@ const AssetDetailsModal: React.FC<AssetDetailsModalProps> = ({ asset, onClose })
 
     const fetchCreatorName = async () => {
       if (!asset?.created_by) {
-        setCreatorName('Unknown');
+        setCreatorName('');
         return;
       }
 
@@ -55,15 +55,15 @@ const AssetDetailsModal: React.FC<AssetDetailsModalProps> = ({ asset, onClose })
 
         if (error) {
           console.error('Error fetching creator name:', error);
-          setCreatorName('Unknown');
+          setCreatorName('');
         } else if (creatorData) {
-          setCreatorName(creatorData.name || 'Unknown');
+          setCreatorName(creatorData.name || '');
         } else {
-          setCreatorName('Unknown');
+          setCreatorName('');
         }
       } catch (error) {
         console.error('Error fetching creator name:', error);
-        setCreatorName('Unknown');
+        setCreatorName('');
       } finally {
         setLoadingCreator(false);
       }
@@ -150,7 +150,7 @@ const AssetDetailsModal: React.FC<AssetDetailsModalProps> = ({ asset, onClose })
               <div className="space-y-1">
                 {asset.approved_by && (
                   <p className="text-sm">
-                    <span className="font-medium">HOD Approved By:</span> {asset.approver?.name || 'Unknown'}
+                    <span className="font-medium">HOD Approved By:</span> {asset.approver?.name || ''}
                     {asset.approved_at && (
                       <span className="text-gray-500 dark:text-gray-400 ml-2">
                         ({new Date(asset.approved_at).toLocaleDateString()})
@@ -160,7 +160,7 @@ const AssetDetailsModal: React.FC<AssetDetailsModalProps> = ({ asset, onClose })
                 )}
                 {asset.approved_by_lab_incharge && (
                   <p className="text-sm">
-                    <span className="font-medium">Lab Incharge Approved By:</span> {asset.approver_lab_incharge?.name || 'Unknown'}
+                    <span className="font-medium">Lab Incharge Approved By:</span> {asset.approver_lab_incharge?.name || ''}
                     {asset.approved_at_lab_incharge && (
                       <span className="text-gray-500 dark:text-gray-400 ml-2">
                         ({new Date(asset.approved_at_lab_incharge).toLocaleDateString()})

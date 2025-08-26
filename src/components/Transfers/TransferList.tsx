@@ -140,18 +140,21 @@ const TransferList: React.FC = () => {
                       </div>
                     </div>
 
-                    <div className="flex items-center space-x-4 text-sm text-gray-500 dark:text-gray-400">
-                      <div className="flex items-center space-x-1">
-                        <User className="w-4 h-4" />
-                        <span>Initiated by: {transfer.initiator?.name}</span>
-                      </div>
-                      {transfer.receiver && (
-                        <span>Received by: {transfer.receiver.name}</span>
-                      )}
-                      {transfer.received_at && (
-                        <span>on {new Date(transfer.received_at).toLocaleDateString()}</span>
-                      )}
-                    </div>
+                        <div className="flex items-center space-x-4 text-sm text-gray-500 dark:text-gray-400">
+                          <div className="flex items-center space-x-1">
+                            <User className="w-4 h-4" />
+                            <span>Initiated by: {transfer.initiator?.name || ''}</span>
+                          </div>
+                          {transfer.receiver && (
+                            <span>Received by: {transfer.receiver.name || ''}</span>
+                          )}
+                          {transfer.received_by && !transfer.receiver && (
+                            <span>Received by: </span>
+                          )}
+                          {transfer.received_at && (
+                            <span>on {new Date(transfer.received_at).toLocaleDateString()}</span>
+                          )}
+                        </div>
                   </div>
 
                   <div className="ml-4 flex space-x-2">

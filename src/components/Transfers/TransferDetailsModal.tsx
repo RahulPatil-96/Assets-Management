@@ -21,7 +21,6 @@ const TransferDetailsModal: React.FC<TransferDetailsModalProps> = ({ transfer, o
         return;
       }
 
-      // If initiator is already populated from the relationship, use it
       if (transfer.initiator?.name) {
         setInitiatorName(transfer.initiator.name);
         return;
@@ -37,15 +36,15 @@ const TransferDetailsModal: React.FC<TransferDetailsModalProps> = ({ transfer, o
 
         if (error) {
           console.error('Error fetching initiator name:', error);
-          setInitiatorName('Unknown');
+          setInitiatorName('');
         } else if (initiatorData) {
-          setInitiatorName(initiatorData.name || 'Unknown');
+          setInitiatorName(initiatorData.name || '');
         } else {
-          setInitiatorName('Unknown');
+          setInitiatorName('');
         }
       } catch (error) {
         console.error('Error fetching initiator name:', error);
-        setInitiatorName('Unknown');
+        setInitiatorName('');
       } finally {
         setLoadingInitiator(false);
       }
@@ -57,7 +56,6 @@ const TransferDetailsModal: React.FC<TransferDetailsModalProps> = ({ transfer, o
         return;
       }
 
-      // If receiver is already populated from the relationship, use it
       if (transfer.receiver?.name) {
         setReceiverName(transfer.receiver.name);
         return;
@@ -73,15 +71,15 @@ const TransferDetailsModal: React.FC<TransferDetailsModalProps> = ({ transfer, o
 
         if (error) {
           console.error('Error fetching receiver name:', error);
-          setReceiverName('Unknown');
+          setReceiverName('');
         } else if (receiverData) {
-          setReceiverName(receiverData.name || 'Unknown');
+          setReceiverName(receiverData.name || '');
         } else {
-          setReceiverName('Unknown');
+          setReceiverName('');
         }
       } catch (error) {
         console.error('Error fetching receiver name:', error);
-        setReceiverName('Unknown');
+        setReceiverName('');
       } finally {
         setLoadingReceiver(false);
       }

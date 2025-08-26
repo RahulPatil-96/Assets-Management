@@ -23,7 +23,7 @@ const IssueList: React.FC = () => {
   const [remark, setRemark] = useState<string>('');
   const [costRequired, setCostRequired] = useState<string>('');
 
-  const fetchIssues = async (): Promise<AssetIssue[]> => {
+const fetchIssues = async (): Promise<AssetIssue[]> => {
     const { data, error } = await supabase
       .from('asset_issues')
       .select(`
@@ -323,11 +323,14 @@ const IssueList: React.FC = () => {
                         <div className="flex items-center space-x-4 text-sm text-gray-500 dark:text-gray-400">
                           <div className="flex items-center space-x-1">
                             <User className="w-4 h-4" />
-                            <span>Reported by: {issue.reporter?.name}</span>
+                            <span>Reported by: {issue.reporter?.name || ''}</span>
                           </div>
                           <span>Lab: {issue.asset?.allocated_lab}</span>
                           {issue.resolver && (
-                            <span>Resolved by: {issue.resolver.name}</span>
+                            <span>Resolved by: {issue.resolver.name || ''}</span>
+                          )}
+                          {issue.resolved_by && !issue.resolver && (
+                            <span>Resolved by: </span>
                           )}
                         </div>
                       </div>

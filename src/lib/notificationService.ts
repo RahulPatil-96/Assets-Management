@@ -69,18 +69,18 @@ export class NotificationService {
             const { data: actorData } = await supabase
               .from('user_profiles')
               .select('name')
-              .eq('auth_id', notification.actor_id)
+              .eq('id', notification.actor_id)
               .single();
             
             return {
               ...notification,
-              actor_name: actorData?.name || 'Unknown User'
+              actor_name: actorData?.name || ''
             };
           } catch (actorError) {
             console.warn('Failed to fetch actor name:', actorError);
             return {
               ...notification,
-              actor_name: 'Unknown User'
+              actor_name: ''
             };
           }
         }
@@ -191,7 +191,7 @@ export class NotificationService {
     }
   }
 
-  // Show toast notification
+  // Show toast notification with color differentiation
   static showToast(notification: Notification) {
     const actionIcon = {
       created: '🆕',
@@ -203,10 +203,36 @@ export class NotificationService {
     };
 
     const icon = actionIcon[notification.action_type as keyof typeof actionIcon] || '📢';
-    toast.success(`${icon} ${notification.message}`, {
+    const toastColor = this.getToastColor(notification.action_type);
+    
+    toast(`${icon} ${notification.message}`, {
       duration: 4000,
       position: 'top-right',
+      style: {
+        backgroundColor: toastColor,
+        color: 'white',
+      },
     });
+  }
+
+  // Get toast color based on action type
+  static getToastColor(actionType: string) {
+    switch (actionType) {
+      case 'created':
+        return '#38a169'; // green
+      case 'updated':
+        return '#3182ce'; // blue
+      case 'deleted':
+        return '#e53e3e'; // red
+      case 'transferred':
+        return '#805ad5'; // purple
+      case 'approved':
+        return '#38a169'; // green
+      case 'rejected':
+        return '#e53e3e'; // red
+      default:
+        return ''; // default color
+    }
   }
 
   // Format relative time
