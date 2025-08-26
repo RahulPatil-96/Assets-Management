@@ -1,14 +1,10 @@
 import React, { useState, useRef, useEffect } from 'react';
 import { Bell, Clock, Package, AlertTriangle, User } from 'lucide-react';
 import { useNotifications } from '../../contexts/NotificationContext';
-import { useTheme } from '../../contexts/ThemeContext';
-// import { useAuth } from '../../contexts/AuthContext';
 import { NotificationService } from '../../lib/notificationService';
 
 const NotificationBell: React.FC = () => {
   const { notifications, unreadCount, markAsRead, markAllAsRead } = useNotifications();
-  const { isDark } = useTheme();
-  // const { profile } = useAuth();
   const [isOpen, setIsOpen] = useState(false);
   const dropdownRef = useRef<HTMLDivElement>(null);
 
