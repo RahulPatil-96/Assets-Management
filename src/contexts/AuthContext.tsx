@@ -13,7 +13,7 @@ interface Profile {
   id: string;
   email: string;
   lab_id: string;
-  role: 'HOD' | 'Lab Assistant' | 'Faculty';
+  role: 'HOD' | 'Lab Assistant' | 'Lab Incharge';
   name: string;
 }
 

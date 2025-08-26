@@ -95,6 +95,7 @@ const AssetDetailsModal: React.FC<AssetDetailsModalProps> = ({ asset, onClose })
             <div className="space-y-2">
               <h3 className="text-sm font-medium text-gray-500 dark:text-gray-400">Basic Information</h3>
               <div className="space-y-1">
+                <p className="text-sm"><span className="font-medium">Asset ID:</span> {asset.asset_id || 'Pending...'}</p>
                 <p className="text-sm"><span className="font-medium">Name:</span> {asset.name_of_supply}</p>
                 <p className="text-sm"><span className="font-medium">Type:</span> {asset.asset_type}</p>
                 <p className="text-sm"><span className="font-medium">Lab: </span> 
@@ -157,17 +158,17 @@ const AssetDetailsModal: React.FC<AssetDetailsModalProps> = ({ asset, onClose })
                     )}
                   </p>
                 )}
-                {asset.approved_by_faculty && (
+                {asset.approved_by_lab_incharge && (
                   <p className="text-sm">
-                    <span className="font-medium">Faculty Approved By:</span> {asset.approver_faculty?.name || 'Unknown'}
-                    {asset.approved_at_faculty && (
+                    <span className="font-medium">Lab Incharge Approved By:</span> {asset.approver_lab_incharge?.name || 'Unknown'}
+                    {asset.approved_at_lab_incharge && (
                       <span className="text-gray-500 dark:text-gray-400 ml-2">
-                        ({new Date(asset.approved_at_faculty).toLocaleDateString()})
+                        ({new Date(asset.approved_at_lab_incharge).toLocaleDateString()})
                       </span>
                     )}
                   </p>
                 )}
-                {!asset.approved_by && !asset.approved_by_faculty && (
+                {!asset.approved_by && !asset.approved_by_lab_incharge && (
                   <p className="text-sm text-gray-500 dark:text-gray-400">Pending approval</p>
                 )}
                 {asset.approved && (

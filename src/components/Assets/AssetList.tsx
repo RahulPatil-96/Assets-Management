@@ -28,7 +28,7 @@ const AssetList: React.FC<{ searchTerm: string }> = ({ searchTerm }) => {
         *,
         creator:created_by(name, role),
         approver:approved_by(name, role),
-        approver_faculty:approved_by_faculty(name, role)
+        approver_lab_incharge:approved_by_lab_incharge(name, role)
       `)
       .order('created_at', { ascending: false });
 
@@ -67,7 +67,7 @@ const AssetList: React.FC<{ searchTerm: string }> = ({ searchTerm }) => {
   const handleApprove = async (assetId: string, asset: Asset) => {
     try {
       const isHOD = profile?.role === 'HOD';
-      const isFaculty = profile?.role === 'Faculty';
+      const isLabIncharge = profile?.role === 'Lab Incharge';
       
       let updateData: any = {};
       
@@ -77,14 +77,14 @@ const AssetList: React.FC<{ searchTerm: string }> = ({ searchTerm }) => {
           approved_at: new Date().toISOString(),
         };
         
-        // If faculty has already approved, mark as fully approved
-        if (asset.approved_by_faculty) {
+        // If lab incharge has already approved, mark as fully approved
+        if (asset.approved_by_lab_incharge) {
           updateData.approved = true;
         }
-      } else if (isFaculty) {
+      } else if (isLabIncharge) {
         updateData = {
-          approved_by_faculty: profile?.id,
-          approved_at_faculty: new Date().toISOString(),
+          approved_by_lab_incharge: profile?.id,
+          approved_at_lab_incharge: new Date().toISOString(),
         };
         
         // If HOD has already approved, mark as fully approved
@@ -102,7 +102,7 @@ const AssetList: React.FC<{ searchTerm: string }> = ({ searchTerm }) => {
 
       // Create notification for all users about the approval
       if (profile?.id) {
-        const approvalType = isHOD ? 'HOD' : 'Faculty';
+        const approvalType = isHOD ? 'HOD' : 'Lab Incharge';
         await NotificationService.createNotificationForAllUsers(
           profile.id,
           'approve',
@@ -177,12 +177,12 @@ const AssetList: React.FC<{ searchTerm: string }> = ({ searchTerm }) => {
 
   const canApprove = (asset: Asset) => {
     const isHOD = profile?.role === 'HOD';
-    const isFaculty = profile?.role === 'Faculty';
+    const isLabIncharge = profile?.role === 'Lab Incharge';
     
     if (isHOD) {
       return !asset.approved_by && !asset.approved;
-    } else if (isFaculty) {
-      return !asset.approved_by_faculty && !asset.approved;
+    } else if (isLabIncharge) {
+      return !asset.approved_by_lab_incharge && !asset.approved;
     }
     
     return false;
@@ -345,6 +345,7 @@ const AssetList: React.FC<{ searchTerm: string }> = ({ searchTerm }) => {
                 <table className="w-full">
                   <thead className="bg-gray-50 dark:bg-gray-700 border-b border-gray-200 dark:border-gray-600">
                     <tr>
+                      <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-300 uppercase tracking-wider">Asset ID</th>
                       <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-300 uppercase tracking-wider">Asset</th>
                       <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-300 uppercase tracking-wider">Details</th>
                       <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-300 uppercase tracking-wider">Actions</th>
@@ -353,6 +354,9 @@ const AssetList: React.FC<{ searchTerm: string }> = ({ searchTerm }) => {
                   <tbody>
                     {filteredAssets.map(asset => (
                       <tr key={asset.id} className="border-b border-gray-200 dark:border-gray-600">
+                        <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900 dark:text-gray-100">
+                          {asset.asset_id || 'Pending...'}
+                        </td>
                         <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900 dark:text-gray-100">{asset.name_of_supply}</td>
                         <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500 dark:text-gray-400">
                           <div>Lab: {asset.allocated_lab}</div>
@@ -363,8 +367,8 @@ const AssetList: React.FC<{ searchTerm: string }> = ({ searchTerm }) => {
                           {asset.approved_by && (
                             <div>HOD Approved: {asset.approver?.name || 'Unknown'}</div>
                           )}
-                          {asset.approved_by_faculty && (
-                            <div>Faculty Approved: {asset.approver_faculty?.name || 'Unknown'}</div>
+                          {asset.approved_by_lab_incharge && (
+                            <div>Lab Incharge Approved: {asset.approver_lab_incharge?.name || 'Unknown'}</div>
                           )}
                         </td>
                         <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-500 dark:text-gray-400">

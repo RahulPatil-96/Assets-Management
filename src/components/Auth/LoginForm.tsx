@@ -132,7 +132,7 @@ const LoginForm: React.FC = () => {
                       className="w-full px-4 py-2 pr-10 rounded-md border border-white/20 bg-white/5 text-white placeholder-white/50 focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 transition duration-200 ease-in-out"
                     >
                       <option className="bg-gray-800 text-white" value="">Select a role</option>
-                      <option className="bg-gray-800 text-white" value="Faculty">Faculty</option>
+                      <option className="bg-gray-800 text-white" value="Lab Incharge">Lab Incharge</option>
                       <option className="bg-gray-800 text-white" value="Lab Assistant">Lab Assistant</option>
                       <option className="bg-gray-800 text-white" value="HOD">HOD</option>
                     </select>

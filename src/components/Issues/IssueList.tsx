@@ -21,6 +21,7 @@ const IssueList: React.FC = () => {
   const [activeTab, setActiveTab] = useState<'list' | 'analytics'>('list');
   const [resolvingIssue, setResolvingIssue] = useState<AssetIssue | null>(null);
   const [remark, setRemark] = useState<string>('');
+  const [costRequired, setCostRequired] = useState<string>('');
 
   const fetchIssues = async (): Promise<AssetIssue[]> => {
     const { data, error } = await supabase
@@ -64,16 +65,25 @@ const IssueList: React.FC = () => {
     };
   }, [refetch]);
 
-  const handleResolve = async (issueId: string, remarkText: string = '') => {
+  const handleResolve = async (issueId: string, remarkText: string = '', costRequiredValue: string = '') => {
     try {
+      const updateData: any = {
+        status: 'resolved',
+        resolved_by: profile?.id,
+        resolved_at: new Date().toISOString()
+      };
+
+      if (remarkText.trim()) {
+        updateData.remark = remarkText;
+      }
+
+      if (costRequiredValue.trim()) {
+        updateData.cost_required = parseFloat(costRequiredValue);
+      }
+
       const { error } = await supabase
         .from('asset_issues')
-        .update({
-          status: 'resolved',
-          resolved_by: profile?.id,
-          resolved_at: new Date().toISOString(),
-          remark: remarkText
-        })
+        .update(updateData)
         .eq('id', issueId);
 
       if (error) throw error;
@@ -92,6 +102,7 @@ const IssueList: React.FC = () => {
       refetch();
       setResolvingIssue(null);
       setRemark('');
+      setCostRequired('');
     } catch (error) {
       console.error('Error resolving issue:', error);
     }
@@ -103,7 +114,7 @@ const IssueList: React.FC = () => {
 
   const handleResolveWithRemark = () => {
     if (resolvingIssue) {
-      handleResolve(resolvingIssue.id, remark);
+      handleResolve(resolvingIssue.id, remark, costRequired);
     }
   };
 
@@ -155,7 +166,7 @@ const IssueList: React.FC = () => {
     <div className="p-6">
       <div className="flex justify-between items-center mb-6">
         <h1 className="text-2xl font-bold text-gray-900 dark:text-gray-100">
-          {profile?.role === 'Faculty' ? 'Report Issues' : 'Issue Management'}
+          {profile?.role === 'Lab Incharge' ? 'Report Issues' : 'Issue Management'}
         </h1>
         <div className="flex items-center space-x-4">
           <button
@@ -369,21 +380,42 @@ const IssueList: React.FC = () => {
         <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
           <div className="bg-white dark:bg-gray-800 rounded-lg shadow-xl max-w-md w-full p-6">
             <h2 className="text-xl font-semibold text-gray-900 dark:text-gray-100 mb-4">Resolve Issue</h2>
-            <p className="text-gray-600 dark:text-gray-400 mb-4">
-              Please provide a remark for resolving this issue:
-            </p>
-            <textarea
-              value={remark}
-              onChange={(e) => setRemark(e.target.value)}
-              placeholder="Enter remark (required)..."
-              className="w-full border border-gray-300 dark:border-gray-600 rounded-lg p-3 mb-4 h-24 resize-none"
-              required
-            />
+            
+            <div className="space-y-4 mb-4">
+              <div>
+                <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
+                  Remark (optional)
+                </label>
+                <textarea
+                  value={remark}
+                  onChange={(e) => setRemark(e.target.value)}
+                  placeholder="Enter remark (optional)..."
+                  className="w-full border border-gray-300 dark:border-gray-600 rounded-lg p-3 h-24 resize-none"
+                />
+              </div>
+              
+              <div>
+                <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
+                  Cost Required (optional)
+                </label>
+                <input
+                  type="number"
+                  value={costRequired}
+                  onChange={(e) => setCostRequired(e.target.value)}
+                  placeholder="Enter cost amount (optional)..."
+                  className="w-full border border-gray-300 dark:border-gray-600 rounded-lg p-3"
+                  min="0"
+                  step="0.01"
+                />
+              </div>
+            </div>
+            
             <div className="flex justify-end space-x-3">
               <button
                 onClick={() => {
                   setResolvingIssue(null);
                   setRemark('');
+                  setCostRequired('');
                 }}
                 className="px-4 py-2 text-gray-600 dark:text-gray-400 hover:text-gray-800 dark:hover:text-gray-300 border border-gray-300 dark:border-gray-600 rounded-lg"
               >
@@ -391,8 +423,7 @@ const IssueList: React.FC = () => {
               </button>
               <button
                 onClick={handleResolveWithRemark}
-                disabled={!remark.trim()}
-                className="px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 dark:bg-green-700 dark:hover:bg-green-800 disabled:opacity-50 disabled:cursor-not-allowed"
+                className="px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 dark:bg-green-700 dark:hover:bg-green-800"
               >
                 Confirm Resolve
               </button>

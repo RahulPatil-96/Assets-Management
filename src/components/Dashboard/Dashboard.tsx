@@ -174,14 +174,14 @@ const Dashboard: React.FC<DashboardProps> = ({ onNavigate }) => {
           bgColor: 'bg-purple-50 dark:bg-purple-900/30',
         },
       ],
-      'Faculty': [
+      'Lab Incharge': [
         {
           title: 'Open Issues',
           value: currentStats.pendingIssues,
           icon: AlertTriangle,
           color: 'bg-yellow-500',
           textColor: 'text-yellow-600 dark:text-yellow-400',
-          bgColor: 'bg-yellow-50 dark:bg-yellow-900/30',
+        bgColor: 'bg-yellow-50 dark:bg-yellow-900/30',
         },
       ],
     };
@@ -289,7 +289,7 @@ const Dashboard: React.FC<DashboardProps> = ({ onNavigate }) => {
                     </button>
                     <button 
                       onClick={() => onNavigate?.('transfers')}
-                      className="w-full text-left p-极速赛车开奖直播3 rounded-lg border border-gray-200 dark:border-gray-600 hover:bg-gray-50 dark:hover:bg-gray-700 transition-colors hover:shadow-sm"
+                      className="w-full text-left p-3 rounded-lg border border-gray-200 dark:border-gray-600 hover:bg-gray-50 dark:hover:bg-gray-700 transition-colors hover:shadow-sm"
                     >
                       <div className="flex items-center space-x-3">
                         <ArrowRightLeft className="w-5 h-5 text-purple-600 dark:text-purple-400" />
@@ -298,7 +298,7 @@ const Dashboard: React.FC<DashboardProps> = ({ onNavigate }) => {
                     </button>
                   </>
                 )}
-                {profile?.role === 'Faculty' && (
+                {profile?.role === 'Lab Incharge' && (
                   <button 
                     onClick={() => onNavigate?.('issues')}
                     className="w-full text-left p-3 rounded-lg border border-gray-200 dark:border-gray-600 hover:bg-gray-50 dark:hover:bg-gray-700 transition-colors hover:shadow-sm"

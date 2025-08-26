@@ -22,7 +22,7 @@ const Navbar: React.FC<{ onSearch: (term: string) => void }> = ({ onSearch }) =>
         return 'bg-purple-100 text-purple-700 ring-1 ring-purple-300';
       case 'Lab Assistant':
         return 'bg-blue-100 text-blue-700 ring-1 ring-blue-300';
-      case 'Faculty':
+      case 'Lab Incharge':
         return 'bg-green-100 text-green-700 ring-1 ring-green-300';
       default:
         return 'bg-gray-100 text-gray-700 ring-1 ring-gray-300';

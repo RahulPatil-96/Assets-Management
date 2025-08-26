@@ -19,7 +19,7 @@ export interface LabStaff {
   id: string;
   lab_id: string;
   user_id: string;
-  role: 'incharge' | 'assistant' | 'faculty';
+  role: 'incharge' | 'assistant' | 'lab incharge';
   assigned_at: string;
   user_name?: string;
   user_role?: string;
@@ -55,7 +55,7 @@ export interface LabAccess {
   lab_id: string;
   lab_name: string;
   user_role: string;
-  lab_role: 'incharge' | 'assistant' | 'faculty';
+  lab_role: 'incharge' | 'assistant' | 'lab incharge';
   assigned_at: string;
 }
 
@@ -94,7 +94,7 @@ export interface UpdateLabIssueRequest {
 
 export interface AssignStaffRequest {
   user_id: string;
-  role: 'incharge' | 'assistant' | 'faculty';
+  role: 'incharge' | 'assistant' | 'lab incharge';
 }
 
 export interface LabFilters {

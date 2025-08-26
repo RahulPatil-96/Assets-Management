@@ -7,7 +7,7 @@ CREATE SCHEMA public;
 -- ===================================================================
 -- CUSTOM ENUM TYPES
 -- ===================================================================
-CREATE TYPE user_role AS ENUM ('HOD', 'Lab Assistant', 'Faculty');
+CREATE TYPE user_role AS ENUM ('HOD', 'Lab Assistant', 'Lab Incharge');
 CREATE TYPE issue_status AS ENUM ('open', 'resolved');
 CREATE TYPE transfer_status AS ENUM ('pending', 'received');
 
@@ -38,7 +38,8 @@ CREATE TABLE assets (
   description text,
   quantity integer NOT NULL CHECK (quantity > 0),
   rate numeric(10,2) NOT NULL CHECK (rate >= 0),
-  total_amount numeric(10,2) GENERATED ALWAYS AS (quantity * rate) STORED,
+total_amount numeric(10,2) GENERATED ALWAYS AS (quantity * rate) STORED,
+  asset_id text,
   remark text,
   allocated_lab text NOT NULL,
   created_by uuid REFERENCES user_profiles(id) ON DELETE SET NULL,
@@ -62,6 +63,7 @@ CREATE TABLE asset_issues (
   resolved_by uuid REFERENCES user_profiles(id) ON DELETE SET NULL,
   resolved_at timestamptz,
   remark text,
+  cost_required numeric(10,2),
   updated_at timestamptz DEFAULT now()
 );
 
@@ -154,6 +156,68 @@ CREATE INDEX idx_activity_logs_severity ON activity_logs(severity_level);
 -- ===================================================================
 -- FUNCTIONS & TRIGGERS
 -- ===================================================================
+
+-- Function to generate asset ID
+CREATE OR REPLACE FUNCTION generate_asset_id(lab_identifier text, asset_type text, asset_number integer)
+RETURNS text AS $$
+DECLARE
+    asset_type_prefix text;
+BEGIN
+    -- Map asset types to prefixes
+    CASE asset_type
+        WHEN 'cpu' THEN asset_type_prefix := 'PC';
+        WHEN 'printer' THEN asset_type_prefix := 'PR';
+        WHEN 'network' THEN asset_type_prefix := 'NW';
+        WHEN 'peripheral' THEN asset_type_prefix := 'PE';
+        WHEN 'microcontroller' THEN asset_type_prefix := 'MC';
+        WHEN 'monitor' THEN asset_type_prefix := 'MO';
+        WHEN 'mouse' THEN asset_type_prefix := 'MS';
+        WHEN 'keyboard' THEN asset_type_prefix := 'KB';
+        WHEN 'scanner' THEN asset_type_prefix := 'SC';
+        WHEN 'projector' THEN asset_type_prefix := 'PJ';
+        WHEN 'laptop' THEN asset_type_prefix := 'LP';
+        ELSE asset_type_prefix := 'OT';
+    END CASE;
+    
+    RETURN 'RSCOE/CSBS/' || lab_identifier || '/' || asset_type_prefix || '-' || asset_number;
+END;
+$$ LANGUAGE plpgsql;
+
+-- Trigger to set asset_id on insert
+CREATE OR REPLACE FUNCTION set_asset_id() RETURNS TRIGGER AS $$
+DECLARE
+    asset_number integer;
+BEGIN
+    -- Get the next asset number for the specific lab and asset type combination
+    SELECT COALESCE(MAX(
+        CASE 
+            WHEN asset_id IS NOT NULL AND asset_id LIKE '%' || NEW.allocated_lab || '/' || 
+                 CASE NEW.asset_type
+                     WHEN 'cpu' THEN 'PC'
+                     WHEN 'printer' THEN 'PR'
+                     WHEN 'network' THEN 'NW'
+                     WHEN 'peripheral' THEN 'PE'
+                     WHEN 'microcontroller' THEN 'MC'
+                     WHEN 'monitor' THEN 'MO'
+                     WHEN 'mouse' THEN 'MS'
+                     WHEN 'keyboard' THEN 'KB'
+                     WHEN 'scanner' THEN 'SC'
+                     WHEN 'projector' THEN 'PJ'
+                     WHEN 'laptop' THEN 'LP'
+                     ELSE 'OT'
+                 END || '-%' 
+            THEN CAST(SUBSTRING(asset_id FROM '.*-(\d+)$') AS INTEGER)
+            ELSE 0
+        END
+    ), 0) + 1 INTO asset_number 
+    FROM assets 
+    WHERE allocated_lab = NEW.allocated_lab AND asset_type = NEW.asset_type;
+
+    -- Generate the asset ID
+    NEW.asset_id := generate_asset_id(NEW.allocated_lab, NEW.asset_type, asset_number);
+    RETURN NEW;
+END;
+$$ LANGUAGE plpgsql;
 
 -- Timestamp update function
 CREATE OR REPLACE FUNCTION update_updated_at_column() RETURNS TRIGGER AS $$
@@ -657,6 +721,10 @@ END;
 $$ LANGUAGE plpgsql;
 
 -- Create triggers for all tables
+CREATE TRIGGER trg_assets_set_asset_id
+  BEFORE INSERT ON assets
+  FOR EACH ROW EXECUTE FUNCTION set_asset_id();
+
 CREATE TRIGGER trg_user_profiles_audit 
   AFTER INSERT OR UPDATE OR DELETE ON user_profiles
   FOR EACH ROW EXECUTE FUNCTION trg_user_profiles_audit();
@@ -743,36 +811,41 @@ GRANT ALL PRIVILEGES ON ALL SEQUENCES IN SCHEMA public TO service_role;
 INSERT INTO user_profiles (auth_id, email, role, name, lab_id) VALUES
 ('734ed3f0-37a9-49d0-8388-ed24536ee246', 'hod@university.edu', 'HOD', 'Dr. John Smith', 'ADMIN'),
 ('7c8785c1-8743-4618-86ea-3922554a5b87', 'labassistant@university.edu', 'Lab Assistant', 'Alice Johnson', 'CSE-LAB-01'),
-('3f732856-c91e-442c-8abf-5c529906f9d7', 'faculty@university.edu', 'Faculty', 'Prof. Robert Williams', 'CSE-LAB-01'),
+('3f732856-c91e-442c-8abf-5c529906f9d7', 'labincharge@university.edu', 'Lab Incharge', 'Prof. Robert Williams', 'CSE-LAB-01'),
 ('2be9de39-516d-4c50-a7a4-c13c7e2fe6a6', 'labassistant2@university.edu', 'Lab Assistant', 'Bob Davis', 'MECH-LAB-01'),
-('61592b47-e1c0-49ce-a5e5-0fc7d7eed86a', 'faculty2@university.edu', 'Faculty', 'Dr. Sarah Miller', 'MECH-LAB-01');
+('61592b47-e1c0-49ce-a5e5-0fc7d7eed86a', 'labincharge2@university.edu', 'Lab Incharge', 'Dr. Sarah Miller', 'MECH-LAB-01');
 
 -- Insert sample assets (this will trigger logs and notifications)
-INSERT INTO assets (date, name_of_supply, asset_type, invoice_number, description, quantity, rate, allocated_lab, created_by, approved, approved_by, approved_by_faculty) VALUES
+INSERT INTO assets (date, name_of_supply, asset_type, invoice_number, description, quantity, rate, allocated_lab, created_by, approved, approved_by, approved_by_faculty, asset_id) VALUES
 ('2024-01-15', 'Dell OptiPlex 7090', 'cpu', 'INV-2024-001', 'Desktop Computer Intel i7, 16GB RAM, 512GB SSD', 10, 75000.00, 'CSE-LAB-01', 
  (SELECT id FROM user_profiles WHERE name = 'Alice Johnson'), true, 
  (SELECT id FROM user_profiles WHERE name = 'Dr. John Smith'),
- (SELECT id FROM user_profiles WHERE name = 'Prof. Robert Williams')),
+ (SELECT id FROM user_profiles WHERE name = 'Prof. Robert Williams'),
+ 'RSCOE/CSBS/CSE-LAB-01/PC-1'),
 
 ('2024-01-20', 'HP LaserJet Pro M404dn', 'printer', 'INV-2024-002', 'Laser Printer Monochrome', 3, 25000.00, 'CSE-LAB-01',
  (SELECT id FROM user_profiles WHERE name = 'Alice Johnson'), true,
  (SELECT id FROM user_profiles WHERE name = 'Dr. John Smith'),
- (SELECT id FROM user_profiles WHERE name = 'Prof. Robert Williams')),
+ (SELECT id FROM user_profiles WHERE name = 'Prof. Robert Williams'),
+ 'RSCOE/CSBS/CSE-LAB-01/PR-1'),
 
 ('2024-01-25', 'Cisco Catalyst 2960-X', 'network', 'INV-2024-003', 'Network Switch 48-port', 2, 45000.00, 'CSE-LAB-01',
  (SELECT id FROM user_profiles WHERE name = 'Alice Johnson'), true,
  (SELECT id FROM user_profiles WHERE name = 'Dr. John Smith'),
- (SELECT id FROM user_profiles WHERE name = 'Prof. Robert Williams')),
+ (SELECT id FROM user_profiles WHERE name = 'Prof. Robert Williams'),
+ 'RSCOE/CSBS/CSE-LAB-01/NW-1'),
 
 ('2024-02-01', 'Logitech C920 HD Pro', 'peripheral', 'INV-2024-004', 'Webcam Full HD 1080p', 15, 8000.00, 'MECH-LAB-01',
  (SELECT id FROM user_profiles WHERE name = 'Bob Davis'), true,
  (SELECT id FROM user_profiles WHERE name = 'Dr. John Smith'),
- (SELECT id FROM user_profiles WHERE name = 'Dr. Sarah Miller')),
+ (SELECT id FROM user_profiles WHERE name = 'Dr. Sarah Miller'),
+ 'RSCOE/CSBS/MECH-LAB-01/PE-1'),
 
 ('2024-02-10', 'Arduino Uno R3', 'microcontroller', 'INV-2024-005', 'Microcontroller Board', 50, 1500.00, 'MECH-LAB-01',
  (SELECT id FROM user_profiles WHERE name = 'Bob Davis'), true,
  (SELECT id FROM user_profiles WHERE name = 'Dr. John Smith'),
- (SELECT id FROM user_profiles WHERE name = 'Dr. Sarah Miller'));
+ (SELECT id FROM user_profiles WHERE name = 'Dr. Sarah Miller'),
+ 'RSCOE/CSBS/MECH-LAB-01/MC-1');
 
 -- Insert sample asset issues
 INSERT INTO asset_issues (asset_id, issue_description, reported_by, status) VALUES

@@ -10,7 +10,7 @@ if (!supabaseUrl || !supabaseAnonKey) {
 export const supabase = createClient(supabaseUrl, supabaseAnonKey);
 
 // Database types
-export type UserRole = 'HOD' | 'Lab Assistant' | 'Faculty';
+export type UserRole = 'HOD' | 'Lab Assistant' | 'Lab Incharge';
 export type IssueStatus = 'open' | 'resolved';
 export type TransferStatus = 'pending' | 'received';
 
@@ -35,19 +35,20 @@ export interface Asset {
   quantity: number;
   rate: number;
   total_amount: number;
+  asset_id?: string;
   remark?: string;
   allocated_lab: string;
   created_by?: string;
   approved: boolean;
   approved_by?: string;
   approved_at?: string;
-  approved_by_faculty?: string;
-  approved_at_faculty?: string;
+  approved_by_lab_incharge?: string;
+  approved_at_lab_incharge?: string;
   created_at: string;
   updated_at: string;
   creator?: UserProfile;
   approver?: UserProfile;
-  approver_faculty?: UserProfile;
+  approver_lab_incharge?: UserProfile;
 }
 
 export interface AssetIssue {
@@ -56,7 +57,8 @@ export interface AssetIssue {
   issue_description: string;
   reported_by?: string;
   reported_at: string;
-  remark?: string; // Added remark field
+  remark?: string;
+  cost_required?: number;
   status: IssueStatus;
   resolved_by?: string;
   resolved_at?: string;

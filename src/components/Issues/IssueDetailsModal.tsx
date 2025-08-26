@@ -130,13 +130,26 @@ const IssueDetailsModal: React.FC<IssueDetailsModalProps> = ({ issue, onClose })
             )}
           </div>
 
-          {issue.remark && issue.status === 'resolved' && (
-            <div className="space-y-2">
-              <h3 className="text-sm font-medium text-gray-500 dark:text-gray-400">Resolution Remark</h3>
-              <p className="text-sm text-gray-900 dark:text-gray-100 bg-gray-50 dark:bg-gray-700 p-3 rounded-lg">
-                {issue.remark}
-              </p>
-            </div>
+          {issue.status === 'resolved' && (
+            <>
+              {issue.remark && (
+                <div className="space-y-2">
+                  <h3 className="text-sm font-medium text-gray-500 dark:text-gray-400">Resolution Remark</h3>
+                  <p className="text-sm text-gray-900 dark:text-gray-100 bg-gray-50 dark:bg-gray-700 p-3 rounded-lg">
+                    {issue.remark}
+                  </p>
+                </div>
+              )}
+              
+              {issue.cost_required && (
+                <div className="space-y-2">
+                  <h3 className="text-sm font-medium text-gray-500 dark:text-gray-400">Cost Required</h3>
+                  <p className="text-sm text-gray-900 dark:text-gray-100 bg-gray-50 dark:bg-gray-700 p-3 rounded-lg">
+                    ₹{issue.cost_required.toLocaleString('en-IN')}
+                  </p>
+                </div>
+              )}
+            </>
           )}
 
           {issue.updated_at && (

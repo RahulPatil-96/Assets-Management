@@ -36,7 +36,7 @@ const Sidebar: React.FC<SidebarProps> = ({ activeTab, setActiveTab }) => {
         { id: 'issues', label: 'Issue Management', icon: AlertTriangle },
         { id: 'transfers', label: 'Asset Transfers', icon: ArrowRightLeft },
       ],
-      Faculty: [
+      'Lab Incharge': [
         { id: 'issues', label: 'Report Issues', icon: AlertTriangle },
         { id: 'transfers', label: 'Asset Transfers', icon: ArrowRightLeft },
       ],
