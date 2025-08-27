@@ -1,6 +1,7 @@
 import React, { createContext, useContext, useEffect, useState, useCallback } from 'react';
 import { useAuth } from './AuthContext';
 import { NotificationService, Notification } from '../lib/notificationService';
+import { notificationSoundService } from '../lib/notificationSoundService';
 
 interface NotificationContextType {
   notifications: Notification[];
@@ -85,6 +86,8 @@ export const NotificationProvider: React.FC<{ children: React.ReactNode }> = ({ 
           setNotifications(prev => [newNotification, ...prev]);
           setUnreadCount(prev => prev + 1);
           NotificationService.showToast(newNotification);
+          // Play notification sound
+          notificationSoundService.playNotification();
         }
       );
 

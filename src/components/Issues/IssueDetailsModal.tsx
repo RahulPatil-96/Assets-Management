@@ -3,7 +3,7 @@ import { X } from 'lucide-react';
 import { AssetIssue } from '../../lib/supabase';
 import { supabase } from '../../lib/supabase';
 
-interface IssueDetailsModalProps {
+export interface IssueDetailsModalProps {
   issue: AssetIssue | null;
   onClose: () => void;
 }

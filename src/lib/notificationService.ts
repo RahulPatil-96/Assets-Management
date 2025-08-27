@@ -1,6 +1,33 @@
 import { supabase } from './supabase';
 import { toast } from 'react-hot-toast';
 
+// Input validation function to prevent security vulnerabilities
+const validateInput = (input: string, fieldName: string): void => {
+  if (typeof input !== 'string') {
+    throw new Error(`Invalid input type for ${fieldName}. Expected string.`);
+  }
+  
+  // Basic validation to prevent SQL injection and other vulnerabilities
+  const regex = /^[a-zA-Z0-9\s.,\-_@()]*$/; // Allow alphanumeric characters, spaces, and safe punctuation
+  
+  if (!regex.test(input)) {
+    throw new Error(`Invalid characters in ${fieldName}. Only alphanumeric characters, spaces, and basic punctuation are allowed.`);
+  }
+  
+  // Length validation
+  if (input.length > 255) {
+    throw new Error(`${fieldName} is too long. Maximum length is 255 characters.`);
+  }
+};
+
+// Validate UUID format
+const validateUUID = (uuid: string, fieldName: string): void => {
+  const uuidRegex = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+  if (!uuidRegex.test(uuid)) {
+    throw new Error(`Invalid UUID format for ${fieldName}`);
+  }
+};
+
 export interface Notification {
   id: string;
   user_id: string;
@@ -132,6 +159,14 @@ export class NotificationService {
     entityId: string,
     entityName: string
   ) {
+    // Validate all inputs
+    validateUUID(userId, 'userId');
+    validateUUID(actorId, 'actorId');
+    validateInput(actionType, 'actionType');
+    validateInput(entityType, 'entityType');
+    validateUUID(entityId, 'entityId');
+    validateInput(entityName, 'entityName');
+
     const { data, error } = await supabase
       .rpc('create_notification', {
         action_type: actionType,
@@ -146,7 +181,7 @@ export class NotificationService {
     return data;
   }
 
-  // Create notification for all users (all roles)
+  // Create notification for all users (all roles) - optimized to avoid duplicate sounds
   static async createNotificationForAllUsers(
     actorProfileId: string,
     actionType: string,
@@ -154,6 +189,13 @@ export class NotificationService {
     entityId: string,
     entityName: string
   ) {
+    // Validate all inputs
+    validateUUID(actorProfileId, 'actorProfileId');
+    validateInput(actionType, 'actionType');
+    validateInput(entityType, 'entityType');
+    validateUUID(entityId, 'entityId');
+    validateInput(entityName, 'entityName');
+
     try {
       // Get the actor's auth_id from user_profiles table
       const { data: actorData, error: actorError } = await supabase
@@ -164,29 +206,22 @@ export class NotificationService {
 
       if (actorError) throw actorError;
 
-      // Get all user IDs from user_profiles table
-      const { data: users, error: usersError } = await supabase
-        .from('user_profiles')
-        .select('auth_id');
+      // Use a direct SQL query to insert all notifications at once
+      // This prevents individual real-time events from triggering for each notification
+      const { error } = await supabase.rpc('create_bulk_notification_silent', {
+        p_action_type: actionType,
+        p_entity_id: entityId,
+        p_entity_name: entityName,
+        p_entity_type: entityType,
+        p_actor_id: actorData.auth_id
+      });
 
-      if (usersError) throw usersError;
-
-      // Create notifications for all users
-      const notificationPromises = users?.map(user => 
-        this.createNotification(
-          user.auth_id,
-          actorData.auth_id,
-          actionType,
-          entityType,
-          entityId,
-          entityName
-        )
-      ) || [];
-
-      await Promise.all(notificationPromises);
+      if (error) throw error;
       return true;
     } catch (error) {
+      // Log the error and show a toast notification
       console.error('Error creating notifications for all users:', error);
+      toast.error('Failed to create notifications. Please try again later.');
       throw error;
     }
   }

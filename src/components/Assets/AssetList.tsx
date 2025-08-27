@@ -194,9 +194,9 @@ const fetchAssets = async (): Promise<Asset[]> => {
 
   if (isLoading) {
     return (
-      <div className="p-6">
+      <div className="p-4 sm:p-6">
         <div className="animate-pulse">
-          <div className="h-8 bg-gray-200 dark:bg-gray-700 rounded w-1/4 mb-6"></div>
+          <div className="h-8 bg-gray-200 dark:bg-gray-700 rounded w-1/3 sm:w-1/4 mb-4 sm:mb-6"></div>
           <div className="space-y-4">
             {[1, 2, 3].map(i => (
               <div key={i} className="h-20 bg-gray-200 dark:bg-gray-700 rounded"></div>
@@ -208,9 +208,9 @@ const fetchAssets = async (): Promise<Asset[]> => {
   }
 
   return (
-    <div className="p-6">
-      <div className="flex justify-between items-center mb-6">
-        <h1 className="text-2xl font-bold text-gray-900 dark:text-gray-100">Asset Management</h1>
+    <div className="p-4 sm:p-6">
+      <div className="flex flex-col sm:flex-row justify-between items-center mb-6">
+        <h1 className="text-2xl font-bold text-gray-900 dark:text-gray-100 mb-4 sm:mb-0">Asset Management</h1>
         <div className="flex items-center space-x-4">
           {profile?.role === 'Lab Assistant' && (
             <button
@@ -218,7 +218,7 @@ const fetchAssets = async (): Promise<Asset[]> => {
               className="bg-blue-600 text-white px-4 py-2 rounded-lg hover:bg-blue-700 dark:bg-blue-700 dark:hover:bg-blue-800 flex items-center space-x-2 transition-colors"
             >
               <Plus className="w-4 h-4" />
-              <span>Add Asset</span>
+              <span className="hidden sm:inline">Add Asset</span>
             </button>
           )}
           <ExportButton
@@ -240,7 +240,8 @@ const fetchAssets = async (): Promise<Asset[]> => {
           }`}
         >
           <Package className="w-4 h-4 inline mr-2" />
-          Asset List
+          <span className="hidden sm:inline">Asset List</span>
+          <span className="sm:hidden">List</span>
         </button>
         <button
           onClick={() => setActiveTab('analytics')}
@@ -251,7 +252,8 @@ const fetchAssets = async (): Promise<Asset[]> => {
           }`}
         >
           <BarChart3 className="w-4 h-4 inline mr-2" />
-          Analytics
+          <span className="hidden sm:inline">Analytics</span>
+          <span className="sm:hidden">Stats</span>
         </button>
       </div>
 

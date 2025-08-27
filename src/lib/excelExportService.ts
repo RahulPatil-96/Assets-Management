@@ -3,159 +3,276 @@ import { Asset, AssetIssue } from './supabase';
 import { AssetAnalytics, IssueAnalytics } from './analyticsService';
 
 export class ExcelExportService {
-  static async exportAssetsToExcel(assets: Asset[], analytics: AssetAnalytics, fileName: string = 'assets-report.xlsx') {
+  // Helper: Add title (merged, bold, centered)
+  static addTitle(sheet: ExcelJS.Worksheet, title: string, row = 1, colStart = 1, colEnd = 8) {
+    sheet.mergeCells(row, colStart, row, colEnd);
+    const cell = sheet.getCell(row, colStart);
+    cell.value = title;
+    cell.font = { size: 16, bold: true };
+    cell.alignment = { horizontal: 'center' };
+  }
+
+  // Helper: Add subtitle (merged, centered)
+  static addSubtitle(sheet: ExcelJS.Worksheet, subtitle: string, row: number, colStart = 1, colEnd = 8) {
+    sheet.mergeCells(row, colStart, row, colEnd);
+    const cell = sheet.getCell(row, colStart);
+    cell.value = subtitle;
+    cell.alignment = { horizontal: 'center' };
+  }
+
+  // Helper: Add summary table starting at given row
+  static addSummary(sheet: ExcelJS.Worksheet, summaryData: [string, string | number][], startRow: number, colLabel = 1, colValue = 2) {
+    sheet.mergeCells(startRow - 1, colLabel, startRow - 1, colValue);
+    const headerCell = sheet.getCell(startRow - 1, colLabel);
+    headerCell.value = 'Summary';
+    headerCell.font = { size: 14, bold: true };
+
+    summaryData.forEach(([label, value], i) => {
+      const labelCell = sheet.getCell(startRow + i, colLabel);
+      const valueCell = sheet.getCell(startRow + i, colValue);
+      labelCell.value = label;
+      labelCell.font = { bold: true };
+      valueCell.value = value;
+
+      // Number formatting for currency or numbers
+      if (typeof value === 'number') {
+        if (label.toLowerCase().includes('cost') || label.toLowerCase().includes('total')) {
+          valueCell.numFmt = '₹#,##0.00';
+        } else {
+          valueCell.numFmt = '#,##0';
+        }
+      }
+    });
+  }
+
+  // Helper: Add headers row with fill color and center alignment
+  static addHeaders(sheet: ExcelJS.Worksheet, row: number, headers: string[], fillColorHex: string) {
+    headers.forEach((header, i) => {
+      const cell = sheet.getCell(row, i + 1);
+      cell.value = header;
+      cell.font = { bold: true, color: { argb: 'FFFFFFFF' } };
+      cell.fill = {
+        type: 'pattern',
+        pattern: 'solid',
+        fgColor: { argb: fillColorHex }
+      };
+      cell.alignment = { horizontal: 'center' };
+      cell.border = {
+        top: { style: 'thin' },
+        bottom: { style: 'thin' },
+        left: { style: 'thin' },
+        right: { style: 'thin' }
+      };
+    });
+  }
+
+  // Helper: Auto format all columns width of a sheet
+  static autoFormatColumns(sheet: ExcelJS.Worksheet, width = 18) {
+    sheet.columns.forEach(col => {
+      col.width = width;
+    });
+  }
+
+  // Helper: Download workbook with correct filename & single .xlsx extension
+  static async downloadWorkbook(workbook: ExcelJS.Workbook, fileName: string) {
+    if (!fileName.toLowerCase().endsWith('.xlsx')) {
+      fileName += '.xlsx';
+    }
+    const buffer = await workbook.xlsx.writeBuffer();
+    const blob = new Blob([buffer], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement('a');
+    link.href = url;
+    link.download = fileName;
+    link.click();
+    URL.revokeObjectURL(url);
+  }
+
+  // Export Assets Report
+  static async exportAssetsToExcel(assets: Asset[], analytics: AssetAnalytics, fileName = 'assets-report.xlsx') {
     const workbook = new ExcelJS.Workbook();
-    
-    // Main Assets Sheet
-    const assetsSheet = workbook.addWorksheet('Asset Details');
-    
-    // Add title
-    assetsSheet.mergeCells('A1:H1');
-    assetsSheet.getCell('A1').value = 'Asset Management Report';
-    assetsSheet.getCell('A1').font = { size: 16, bold: true };
-    assetsSheet.getCell('A1').alignment = { horizontal: 'center' };
-    
-    assetsSheet.mergeCells('A2:H2');
-    assetsSheet.getCell('A2').value = `Generated on: ${new Date().toLocaleDateString()}`;
-    assetsSheet.getCell('A2').alignment = { horizontal: 'center' };
-    
-    // Summary Section
-    assetsSheet.mergeCells('A4:B4');
-    assetsSheet.getCell('A4').value = 'Summary';
-    assetsSheet.getCell('A4').font = { size: 14, bold: true };
-    
-    const summaryData = [
+
+    // --- Asset Details Sheet ---
+    const sheet = workbook.addWorksheet('Asset Details');
+
+    // Titles
+    this.addTitle(sheet, 'Asset Management Report', 1, 1, 8);
+    this.addSubtitle(sheet, `Generated on: ${new Date().toLocaleDateString()}`, 2, 1, 8);
+
+    // Summary
+    const summaryData: [string, string | number][] = [
       ['Total Assets', analytics.totalAssets],
       ['Total Quantity', analytics.totalQuantity],
       ['Total Cost', analytics.totalCost],
       ['Approved Assets', analytics.approvedAssets],
       ['Pending Approval', analytics.pendingAssets]
     ];
-    
-    summaryData.forEach(([label, value], index) => {
-      assetsSheet.getCell(`A${5 + index}`).value = label;
-      assetsSheet.getCell(`B${5 + index}`).value = value;
-      assetsSheet.getCell(`B${5 + index}`).numFmt = '#,##0';
-    });
-    
-    assetsSheet.getCell('B7').numFmt = '₹#,##0.00';
-    
-    // Assets Table
-    assetsSheet.mergeCells('A9:H9');
-    assetsSheet.getCell('A9').value = 'Asset Details';
-    assetsSheet.getCell('A9').font = { size: 14, bold: true };
-    
+    this.addSummary(sheet, summaryData, 4);
+
+    // Add some space before next section
+    sheet.mergeCells('A9:H9');
+    const assetTitleCell = sheet.getCell('A9');
+    assetTitleCell.value = 'Asset Details';
+    assetTitleCell.font = { size: 14, bold: true };
+
     // Headers
     const headers = ['Name', 'Type', 'Lab', 'Quantity', 'Rate', 'Total', 'Status', 'Created Date'];
-    headers.forEach((header, index) => {
-      const cell = assetsSheet.getCell(11, index + 1);
-      cell.value = header;
-      cell.font = { bold: true };
-      cell.fill = {
-        type: 'pattern',
-        pattern: 'solid',
-        fgColor: { argb: 'FF3B82F6' }
-      };
-      cell.alignment = { horizontal: 'center' };
-    });
-    
+    this.addHeaders(sheet, 11, headers, 'FF3B82F6'); // Blue
+
     // Data rows
-    assets.forEach((asset, rowIndex) => {
-      const row = 12 + rowIndex;
-      assetsSheet.getCell(row, 1).value = asset.name_of_supply;
-      assetsSheet.getCell(row, 2).value = asset.asset_type;
-      assetsSheet.getCell(row, 3).value = asset.allocated_lab;
-      assetsSheet.getCell(row, 4).value = asset.quantity;
-      assetsSheet.getCell(row, 5).value = asset.rate;
-      assetsSheet.getCell(row, 5).numFmt = '₹#,##0.00';
-      assetsSheet.getCell(row, 6).value = asset.quantity * asset.rate;
-      assetsSheet.getCell(row, 6).numFmt = '₹#,##0.00';
-      assetsSheet.getCell(row, 7).value = asset.approved ? 'Approved' : 'Pending';
-      assetsSheet.getCell(row, 8).value = new Date(asset.created_at);
-      assetsSheet.getCell(row, 8).numFmt = 'mm/dd/yyyy';
+    assets.forEach((asset, idx) => {
+      const rowNum = 12 + idx;
+      sheet.getCell(rowNum, 1).value = asset.name_of_supply;
+      sheet.getCell(rowNum, 2).value = asset.asset_type;
+      sheet.getCell(rowNum, 3).value = asset.allocated_lab;
+      sheet.getCell(rowNum, 4).value = asset.quantity;
+      sheet.getCell(rowNum, 5).value = asset.rate;
+      sheet.getCell(rowNum, 5).numFmt = '₹#,##0.00';
+      const total = asset.quantity * asset.rate;
+      sheet.getCell(rowNum, 6).value = total;
+      sheet.getCell(rowNum, 6).numFmt = '₹#,##0.00';
+
+      // Status with color + icon
+      const statusCell = sheet.getCell(rowNum, 7);
+      if (asset.approved) {
+        statusCell.value = '✓ Approved';
+        statusCell.fill = {
+          type: 'pattern',
+          pattern: 'solid',
+          fgColor: { argb: 'FF22C55E' } // green
+        };
+      } else {
+        statusCell.value = '⚠️ Pending';
+        statusCell.fill = {
+          type: 'pattern',
+          pattern: 'solid',
+          fgColor: { argb: 'FFF87171' } // red
+        };
+      }
+      statusCell.font = { bold: true };
+      statusCell.alignment = { horizontal: 'center' };
+
+      // Created date
+      const createdDateCell = sheet.getCell(rowNum, 8);
+      createdDateCell.value = new Date(asset.created_at);
+      createdDateCell.numFmt = 'mm/dd/yyyy';
     });
-    
-    // Analytics Sheet
+
+    // Auto format columns
+    this.autoFormatColumns(sheet);
+
+    // --- Analytics Sheet ---
     const analyticsSheet = workbook.addWorksheet('Analytics');
-    
-    analyticsSheet.mergeCells('A1:C1');
-    analyticsSheet.getCell('A1').value = 'Asset Analytics';
-    analyticsSheet.getCell('A1').font = { size: 16, bold: true };
-    
-    // Lab Distribution
-    analyticsSheet.getCell('A3').value = 'Distribution by Lab';
-    analyticsSheet.getCell('A3').font = { bold: true };
-    
-    let row = 4;
-    Object.entries(analytics.byLab).forEach(([lab, count]) => {
+
+    this.addTitle(analyticsSheet, 'Asset Analytics', 1, 1, 3);
+
+    // Analytics Overview text block
+    analyticsSheet.getCell('A3').value = 'Analytics Overview';
+    analyticsSheet.getCell('A3').font = { size: 14, bold: true };
+
+    // Distribution by Lab text with counts formatted as requested
+    let row = 5;
+    analyticsSheet.getCell(`A${row}`).value = 'Distribution by Lab:';
+    analyticsSheet.getCell(`A${row}`).font = { bold: true };
+    row++;
+
+    for (const [lab, count] of Object.entries(analytics.byLab)) {
+      analyticsSheet.getCell(`A${row}`).value = `${lab}: ${count} assets`;
+      row++;
+    }
+
+    // Empty row
+    row++;
+
+    // Cost by Lab text with currency formatting like your example
+    analyticsSheet.getCell(`A${row}`).value = 'Cost by Lab:';
+    analyticsSheet.getCell(`A${row}`).font = { bold: true };
+    row++;
+
+    for (const [lab, cost] of Object.entries(analytics.costByLab)) {
+      // Format cost with "Rs." and commas
+      const costFormatted = `Rs.${cost.toLocaleString('en-IN')}`;
+      analyticsSheet.getCell(`A${row}`).value = `${lab}: ${costFormatted}`;
+      row++;
+    }
+
+    // Add some space before detailed tables
+    row += 2;
+
+    // Detailed Distribution by Lab Table
+    analyticsSheet.getCell(`A${row}`).value = 'Distribution by Lab';
+    analyticsSheet.getCell(`A${row}`).font = { size: 14, bold: true };
+    row++;
+
+    analyticsSheet.getCell(`A${row}`).value = 'Lab';
+    analyticsSheet.getCell(`B${row}`).value = 'Count';
+    analyticsSheet.getRow(row).font = { bold: true };
+    analyticsSheet.getRow(row).alignment = { horizontal: 'center' };
+    row++;
+
+    for (const [lab, count] of Object.entries(analytics.byLab)) {
       analyticsSheet.getCell(`A${row}`).value = lab;
       analyticsSheet.getCell(`B${row}`).value = count;
       row++;
-    });
-    
-    // Cost by Lab
-    analyticsSheet.getCell('A10').value = 'Cost by Lab';
-    analyticsSheet.getCell('A10').font = { bold: true };
-    
-    row = 11;
-    Object.entries(analytics.costByLab).forEach(([lab, cost]) => {
+    }
+
+    row += 2;
+
+    // Cost by Lab Table
+    analyticsSheet.getCell(`A${row}`).value = 'Cost by Lab';
+    analyticsSheet.getCell(`A${row}`).font = { size: 14, bold: true };
+    row++;
+
+    analyticsSheet.getCell(`A${row}`).value = 'Lab';
+    analyticsSheet.getCell(`B${row}`).value = 'Cost';
+    analyticsSheet.getRow(row).font = { bold: true };
+    analyticsSheet.getRow(row).alignment = { horizontal: 'center' };
+    row++;
+
+    for (const [lab, cost] of Object.entries(analytics.costByLab)) {
       analyticsSheet.getCell(`A${row}`).value = lab;
       analyticsSheet.getCell(`B${row}`).value = cost;
       analyticsSheet.getCell(`B${row}`).numFmt = '₹#,##0.00';
       row++;
-    });
-    
-    // Type Distribution
-    analyticsSheet.getCell('A20').value = 'Distribution by Type';
-    analyticsSheet.getCell('A20').font = { bold: true };
-    
-    row = 21;
-    Object.entries(analytics.byType).forEach(([type, count]) => {
+    }
+
+    row += 2;
+
+    // Distribution by Type Table
+    analyticsSheet.getCell(`A${row}`).value = 'Distribution by Type';
+    analyticsSheet.getCell(`A${row}`).font = { size: 14, bold: true };
+    row++;
+
+    analyticsSheet.getCell(`A${row}`).value = 'Type';
+    analyticsSheet.getCell(`B${row}`).value = 'Count';
+    analyticsSheet.getRow(row).font = { bold: true };
+    analyticsSheet.getRow(row).alignment = { horizontal: 'center' };
+    row++;
+
+    for (const [type, count] of Object.entries(analytics.byType)) {
       analyticsSheet.getCell(`A${row}`).value = type;
       analyticsSheet.getCell(`B${row}`).value = count;
       row++;
-    });
-    
-    // Format columns
-    [assetsSheet, analyticsSheet].forEach(sheet => {
-      sheet.columns.forEach(column => {
-        column.width = 15;
-      });
-    });
-    
-    // Save file
-    const buffer = await workbook.xlsx.writeBuffer();
-    const blob = new Blob([buffer], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' });
-    const url = URL.createObjectURL(blob);
-    const link = document.createElement('a');
-    link.href = url;
-    link.download = fileName.endsWith('.xlsx') ? fileName : `${fileName}.xlsx`;
-    link.click();
-    URL.revokeObjectURL(url);
+    }
+
+    this.autoFormatColumns(analyticsSheet);
+
+    // Download the file
+    await this.downloadWorkbook(workbook, fileName);
   }
-  
-  static async exportIssuesToExcel(issues: AssetIssue[], analytics: IssueAnalytics, fileName: string = 'issues-report.xlsx') {
+
+  // Export Issues Report (similar structure, can be extended similarly)
+  static async exportIssuesToExcel(issues: AssetIssue[], analytics: IssueAnalytics, fileName = 'issues-report.xlsx') {
     const workbook = new ExcelJS.Workbook();
-    
-    // Main Issues Sheet
-    const issuesSheet = workbook.addWorksheet('Issue Details');
-    
-    // Add title
-    issuesSheet.mergeCells('A1:F1');
-    issuesSheet.getCell('A1').value = 'Issue Management Report';
-    issuesSheet.getCell('A1').font = { size: 16, bold: true };
-    issuesSheet.getCell('A1').alignment = { horizontal: 'center' };
-    
-    issuesSheet.mergeCells('A2:F2');
-    issuesSheet.getCell('A2').value = `Generated on: ${new Date().toLocaleDateString()}`;
-    issuesSheet.getCell('A2').alignment = { horizontal: 'center' };
-    
+
+    // --- Issue Details Sheet ---
+    const sheet = workbook.addWorksheet('Issue Details');
+
+    this.addTitle(sheet, 'Issue Management Report', 1, 1, 6);
+    this.addSubtitle(sheet, `Generated on: ${new Date().toLocaleDateString()}`, 2, 1, 6);
+
     // Summary Section
-    issuesSheet.mergeCells('A4:B4');
-    issuesSheet.getCell('A4').value = 'Summary';
-    issuesSheet.getCell('A4').font = { size: 14, bold: true };
-    
-    const summaryData = [
+    const summaryData: [string, string | number][] = [
       ['Total Issues', analytics.totalIssues],
       ['Open Issues', analytics.openIssues],
       ['Resolved Issues', analytics.resolvedIssues],
@@ -164,98 +281,96 @@ export class ExcelExportService {
       ['Replacement Cost', analytics.costAnalysis.replacementCost],
       ['Total Potential Cost', analytics.costAnalysis.totalPotentialCost]
     ];
-    
-    summaryData.forEach(([label, value], index) => {
-      issuesSheet.getCell(`A${5 + index}`).value = label;
-      issuesSheet.getCell(`B${5 + index}`).value = value;
-      if (typeof value === 'number' && value > 1000) {
-        issuesSheet.getCell(`B${5 + index}`).numFmt = '₹#,##0.00';
-      }
-    });
-    
-    // Issues Table
-    issuesSheet.mergeCells('A12:F12');
-    issuesSheet.getCell('A12').value = 'Issue Details';
-    issuesSheet.getCell('A12').font = { size: 14, bold: true };
-    
+    this.addSummary(sheet, summaryData, 4, 1, 2);
+
+    sheet.mergeCells('A12:F12');
+    const issuesTitleCell = sheet.getCell('A12');
+    issuesTitleCell.value = 'Issue Details';
+    issuesTitleCell.font = { size: 14, bold: true };
+
     // Headers
     const headers = ['Asset', 'Lab', 'Description', 'Status', 'Reported Date', 'Resolved Date'];
-    headers.forEach((header, index) => {
-      const cell = issuesSheet.getCell(14, index + 1);
-      cell.value = header;
-      cell.font = { bold: true };
-      cell.fill = {
-        type: 'pattern',
-        pattern: 'solid',
-        fgColor: { argb: 'FFEF4444' }
-      };
-      cell.alignment = { horizontal: 'center' };
-    });
-    
+    this.addHeaders(sheet, 14, headers, 'FFEF4444'); // Red
+
     // Data rows
-    issues.forEach((issue, rowIndex) => {
-      const row = 15 + rowIndex;
-      issuesSheet.getCell(row, 1).value = issue.asset?.name_of_supply || 'Unknown';
-      issuesSheet.getCell(row, 2).value = issue.asset?.allocated_lab || 'Unknown';
-      issuesSheet.getCell(row, 3).value = issue.issue_description;
-      issuesSheet.getCell(row, 4).value = issue.status;
-      issuesSheet.getCell(row, 5).value = new Date(issue.reported_at);
-      issuesSheet.getCell(row, 5).numFmt = 'mm/dd/yyyy';
-      issuesSheet.getCell(row, 6).value = issue.resolved_at ? new Date(issue.resolved_at) : '-';
+    issues.forEach((issue, idx) => {
+      const rowNum = 15 + idx;
+      sheet.getCell(rowNum, 1).value = issue.asset?.name_of_supply || 'Unknown';
+      sheet.getCell(rowNum, 2).value = issue.asset?.allocated_lab || 'Unknown';
+      sheet.getCell(rowNum, 3).value = issue.issue_description;
+
+      // Status with color + icon
+      const statusCell = sheet.getCell(rowNum, 4);
+      const status = issue.status.toLowerCase();
+      if (status === 'resolved') {
+        statusCell.value = '✓ Resolved';
+        statusCell.fill = {
+          type: 'pattern',
+          pattern: 'solid',
+          fgColor: { argb: 'FF22C55E' } // green
+        };
+      } else if (status === 'open') {
+        statusCell.value = '⚠️ Open';
+        statusCell.fill = {
+          type: 'pattern',
+          pattern: 'solid',
+          fgColor: { argb: 'FFF87171' } // red
+        };
+      } else {
+        statusCell.value = issue.status;
+      }
+      statusCell.font = { bold: true };
+      statusCell.alignment = { horizontal: 'center' };
+
+      sheet.getCell(rowNum, 5).value = new Date(issue.reported_at);
+      sheet.getCell(rowNum, 5).numFmt = 'mm/dd/yyyy';
+
+      const resolvedCell = sheet.getCell(rowNum, 6);
       if (issue.resolved_at) {
-        issuesSheet.getCell(row, 6).numFmt = 'mm/dd/yyyy';
+        resolvedCell.value = new Date(issue.resolved_at);
+        resolvedCell.numFmt = 'mm/dd/yyyy';
+      } else {
+        resolvedCell.value = '-';
+        resolvedCell.alignment = { horizontal: 'center' };
       }
     });
-    
-    // Analytics Sheet
+
+    this.autoFormatColumns(sheet, 20);
+
+    // --- Analytics Sheet ---
     const analyticsSheet = workbook.addWorksheet('Analytics');
-    
-    analyticsSheet.mergeCells('A1:C1');
-    analyticsSheet.getCell('A1').value = 'Issue Analytics';
-    analyticsSheet.getCell('A1').font = { size: 16, bold: true };
-    
-    // Issues by Lab
+    this.addTitle(analyticsSheet, 'Issue Analytics', 1, 1, 3);
+
     analyticsSheet.getCell('A3').value = 'Issues by Lab';
     analyticsSheet.getCell('A3').font = { bold: true };
-    
+
     let row = 4;
     Object.entries(analytics.issuesByLab).forEach(([lab, count]) => {
       analyticsSheet.getCell(`A${row}`).value = lab;
       analyticsSheet.getCell(`B${row}`).value = count;
       row++;
     });
-    
-    // Cost Analysis
+
+    row += 2;
+
     analyticsSheet.getCell('A10').value = 'Cost Analysis';
     analyticsSheet.getCell('A10').font = { bold: true };
-    
-    const costData = [
+
+    const costData: [string, number][] = [
       ['Estimated Repair Cost', analytics.costAnalysis.estimatedRepairCost],
       ['Replacement Cost', analytics.costAnalysis.replacementCost],
       ['Total Potential Cost', analytics.costAnalysis.totalPotentialCost]
     ];
-    
-    costData.forEach(([label, value], index) => {
-      analyticsSheet.getCell(`A${11 + index}`).value = label;
-      analyticsSheet.getCell(`B${11 + index}`).value = value;
-      analyticsSheet.getCell(`B${11 + index}`).numFmt = '₹#,##0.00';
+
+    costData.forEach(([label, value], i) => {
+      analyticsSheet.getCell(`A${11 + i}`).value = label;
+      analyticsSheet.getCell(`B${11 + i}`).value = value;
+      analyticsSheet.getCell(`B${11 + i}`).numFmt = '₹#,##0.00';
     });
-    
-    // Format columns
-    [issuesSheet, analyticsSheet].forEach(sheet => {
-      sheet.columns.forEach(column => {
-        column.width = 20;
-      });
-    });
-    
-    // Save file
-    const buffer = await workbook.xlsx.writeBuffer();
-    const blob = new Blob([buffer], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' });
-    const url = URL.createObjectURL(blob);
-    const link = document.createElement('a');
-    link.href = url;
-    link.download = fileName.endsWith('.xlsx') ? fileName : `${fileName}.xlsx`;
-    link.click();
-    URL.revokeObjectURL(url);
+
+    this.autoFormatColumns(analyticsSheet, 20);
+
+    // Download file
+    await this.downloadWorkbook(workbook, fileName);
   }
 }

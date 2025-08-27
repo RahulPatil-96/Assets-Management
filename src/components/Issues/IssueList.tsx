@@ -5,11 +5,11 @@ import { useAuth } from '../../contexts/AuthContext';
 import { supabase, AssetIssue } from '../../lib/supabase';
 import { NotificationService } from '../../lib/notificationService';
 import IssueForm from './IssueForm';
-import IssueDetailsModal from './IssueDetailsModal';
+import IssueDetailsModalWithErrorBoundary from './IssueDetailsModalWithErrorBoundary';
 import IssueAnalyticsDashboard from '../Analytics/IssueAnalyticsDashboard';
 import ExportButton from '../Export/ExportButton';
 
-const IssueList: React.FC = () => {
+const IssueListComponent: React.FC = () => {
   const { profile } = useAuth();
   const [fromDate, setFromDate] = useState<string>('');
   const [toDate, setToDate] = useState<string>('');
@@ -372,7 +372,7 @@ const fetchIssues = async (): Promise<AssetIssue[]> => {
       )}
 
       {viewingIssue && (
-        <IssueDetailsModal
+        <IssueDetailsModalWithErrorBoundary
           issue={viewingIssue}
           onClose={() => setViewingIssue(null)}
         />
@@ -438,4 +438,5 @@ const fetchIssues = async (): Promise<AssetIssue[]> => {
   );
 };
 
+const IssueList = React.memo(IssueListComponent);
 export default IssueList;

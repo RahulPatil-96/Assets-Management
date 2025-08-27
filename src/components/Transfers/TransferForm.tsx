@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import { X, Save, Search } from 'lucide-react';
 import { useAuth } from '../../contexts/AuthContext';
 import { supabase, Asset } from '../../lib/supabase';
@@ -22,7 +22,7 @@ const TransferForm: React.FC<TransferFormProps> = ({ onClose, onSave }) => {
     fetchAssets();
   }, [profile]);
 
-  const fetchAssets = async () => {
+  const fetchAssets = useCallback(async () => {
     if (!profile?.lab_id) return;
 
     try {
@@ -38,9 +38,9 @@ const TransferForm: React.FC<TransferFormProps> = ({ onClose, onSave }) => {
     } catch (error) {
       console.error('Error fetching assets:', error);
     }
-  };
+  }, [profile?.lab_id]);
 
-  const handleSubmit = async (e: React.FormEvent) => {
+  const handleSubmit = useCallback(async (e: React.FormEvent) => {
     e.preventDefault();
     setLoading(true);
 
@@ -71,7 +71,7 @@ const TransferForm: React.FC<TransferFormProps> = ({ onClose, onSave }) => {
     } finally {
       setLoading(false);
     }
-  };
+  }, [formData, profile?.lab_id, profile?.id, onSave, onClose]);
 
   const filteredAssets = assets.filter(asset =>
     asset.name_of_supply.toLowerCase().includes(searchTerm.toLowerCase())
@@ -85,6 +85,7 @@ const TransferForm: React.FC<TransferFormProps> = ({ onClose, onSave }) => {
           <button
             onClick={onClose}
             className="text-gray-400 hover:text-gray-600 dark:hover:text-gray-300 p-2"
+            aria-label="Close transfer form"
           >
             <X className="w-5 h-5" />
           </button>

@@ -3,7 +3,7 @@ import { X } from 'lucide-react';
 import { AssetTransfer } from '../../lib/supabase';
 import { supabase } from '../../lib/supabase';
 
-interface TransferDetailsModalProps {
+export interface TransferDetailsModalProps {
   transfer: AssetTransfer | null;
   onClose: () => void;
 }
