@@ -10,6 +10,18 @@ interface TransferFormProps {
 
 const TransferForm: React.FC<TransferFormProps> = ({ onClose, onSave }) => {
   const { profile } = useAuth();
+  
+  if (profile?.role !== 'Lab Incharge') {
+    return (
+      <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50">
+        <div className="bg-white dark:bg-gray-800 rounded-lg shadow-xl max-w-2xl w-full max-h-[90vh] overflow-y-auto p-6">
+          <h2 className="text-xl font-semibold text-gray-900 dark:text-gray-100">Access Denied</h2>
+          <p className="mt-4 text-gray-700 dark:text-gray-300">Only Lab Incharge can initiate asset transfers.</p>
+          <button onClick={onClose} className="mt-4 bg-blue-500 text-white px-4 py-2 rounded">Close</button>
+        </div>
+      </div>
+    );
+  }
   const [loading, setLoading] = useState(false);
   const [assets, setAssets] = useState<Asset[]>([]);
   const [searchTerm, setSearchTerm] = useState('');

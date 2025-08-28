@@ -809,7 +809,6 @@ GRANT ALL PRIVILEGES ON ALL SEQUENCES IN SCHEMA public TO service_role;
 -- ===================================================================
 -- SAMPLE DATA 
 -- ===================================================================
--- Note: Replace auth_id values with actual UUIDs from your Supabase auth.users table
 
 -- Insert sample user profiles
 INSERT INTO user_profiles (auth_id, email, role, name, lab_id) VALUES
@@ -869,7 +868,7 @@ INSERT INTO asset_issues (asset_id, issue_description, reported_by, status) VALU
 INSERT INTO asset_transfers (asset_id, from_lab, to_lab, initiated_by, status) VALUES
 ((SELECT id FROM assets WHERE name_of_supply = 'Logitech C920 HD Pro' LIMIT 1),
  'MECH-LAB-01', 'CSE-LAB-01',
- (SELECT id FROM user_profiles WHERE name = 'Bob Davis'), 'pending');
+ (SELECT id FROM user_profiles WHERE name = 'Dr. Sarah Miller'), 'pending');
 
 -- Manual log entries for system events
 INSERT INTO activity_logs (user_id, action_type, entity_type, entity_id, entity_name, severity_level, success, created_at) VALUES
@@ -899,8 +898,8 @@ INSERT INTO notifications (user_id, actor_id, action_type, entity_type, entity_i
  (SELECT id FROM asset_issues WHERE issue_description LIKE '%Computer not booting%' LIMIT 1),
  'Issue #', 'New issue reported: Computer not booting', false, '2024-01-16 09:15:00'),
 
-((SELECT auth_id FROM user_profiles WHERE name = 'Bob Davis'), 
- (SELECT auth_id FROM user_profiles WHERE name = 'Bob Davis'),
+((SELECT auth_id FROM user_profiles WHERE name = 'Dr. Sarah Miller'), 
+ (SELECT auth_id FROM user_profiles WHERE name = 'Dr. Sarah Miller'),
  'created', 'transfer', 
  (SELECT id FROM asset_transfers WHERE from_lab = 'MECH-LAB-01' LIMIT 1),
  'Asset Transfer', 'Asset transfer initiated: Logitech C920 HD Pro', false, '2024-01-17 14:20:00'),

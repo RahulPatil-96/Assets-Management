@@ -61,7 +61,7 @@ const TransferListComponent: React.FC = () => {
   }, []);
 
   const canReceive = useCallback((transfer: AssetTransfer) => {
-    return profile?.role === 'Lab Assistant' && 
+    return profile?.role === 'Lab Incharge' && 
            transfer.status === 'pending' && 
            transfer.to_lab === profile?.lab_id;
   }, [profile?.role, profile?.lab_id]);
@@ -85,7 +85,7 @@ const TransferListComponent: React.FC = () => {
     <div className="p-4 sm:p-6">
       <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 mb-6">
         <h1 className="text-xl sm:text-2xl font-bold text-gray-900 dark:text-gray-100">Asset Transfers</h1>
-        {profile?.role === 'Lab Assistant' && (
+        {profile?.role === 'Lab Incharge' && (
           <button
             onClick={() => setShowForm(true)}
             className="bg-purple-600 text-white px-4 py-2 rounded-lg hover:bg-purple-700 dark:bg-purple-700 dark:hover:bg-purple-800 flex items-center space-x-2 transition-colors w-full sm:w-auto"
