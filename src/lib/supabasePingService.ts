@@ -17,23 +17,24 @@ export interface PingResult {
  */
 export const sendSupabasePing = async (): Promise<PingResult> => {
   const startTime = Date.now();
-  
+
   try {
     // Execute a simple query that's lightweight but ensures the connection is active
+    // Use auth.users table which always exists in Supabase
     const { error } = await supabase
-      .from('user_profiles')
+      .from('auth.users')
       .select('count', { count: 'exact', head: true })
       .limit(1);
 
     const responseTime = Date.now() - startTime;
-    
+
     if (error) {
       console.warn('Supabase ping failed:', error.message);
       return {
         success: false,
         timestamp: new Date().toISOString(),
         error: error.message,
-        responseTime
+        responseTime,
       };
     }
 
@@ -41,18 +42,18 @@ export const sendSupabasePing = async (): Promise<PingResult> => {
     return {
       success: true,
       timestamp: new Date().toISOString(),
-      responseTime
+      responseTime,
     };
   } catch (error) {
     const responseTime = Date.now() - startTime;
     const errorMessage = error instanceof Error ? error.message : 'Unknown error';
-    
+
     console.error('Supabase ping error:', error);
     return {
       success: false,
       timestamp: new Date().toISOString(),
       error: errorMessage,
-      responseTime
+      responseTime,
     };
   }
 };
@@ -62,11 +63,14 @@ export const sendSupabasePing = async (): Promise<PingResult> => {
  * @param lastPingTime ISO string of last ping time
  * @param intervalMs Interval in milliseconds (default: 2 days)
  */
-export const getNextPingTime = (lastPingTime: string | null, intervalMs: number = 2 * 24 * 60 * 60 * 1000): Date => {
+export const getNextPingTime = (
+  lastPingTime: string | null,
+  intervalMs: number = 2 * 24 * 60 * 60 * 1000
+): Date => {
   if (!lastPingTime) {
     return new Date(Date.now() + intervalMs);
   }
-  
+
   const lastPing = new Date(lastPingTime);
   return new Date(lastPing.getTime() + intervalMs);
 };
@@ -76,11 +80,14 @@ export const getNextPingTime = (lastPingTime: string | null, intervalMs: number 
  * @param lastPingTime ISO string of last ping time
  * @param intervalMs Interval in milliseconds (default: 2 days)
  */
-export const shouldSendPing = (lastPingTime: string | null, intervalMs: number = 2 * 24 * 60 * 60 * 1000): boolean => {
+export const shouldSendPing = (
+  lastPingTime: string | null,
+  intervalMs: number = 2 * 24 * 60 * 60 * 1000
+): boolean => {
   if (!lastPingTime) {
     return true;
   }
-  
+
   const lastPing = new Date(lastPingTime);
   const now = new Date();
   return now.getTime() - lastPing.getTime() >= intervalMs;

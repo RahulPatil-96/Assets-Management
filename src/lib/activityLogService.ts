@@ -57,37 +57,38 @@ export class ActivityLogService {
     errorMessage?: string,
     metadata?: any
   ): Promise<string> {
-    const { data, error } = await supabase
-      .rpc('log_activity', {
-        p_action_type: actionType,
-        p_entity_type: entityType,
-        p_entity_id: entityId,
-        p_entity_name: entityName,
-        p_old_values: oldValues,
-        p_new_values: newValues,
-        p_severity_level: severityLevel,
-        p_success: success,
-        p_error_message: errorMessage,
-        p_metadata: metadata || {}
-      });
+    const { data, error } = await supabase.rpc('log_activity', {
+      p_action_type: actionType,
+      p_entity_type: entityType,
+      p_entity_id: entityId,
+      p_entity_name: entityName,
+      p_old_values: oldValues,
+      p_new_values: newValues,
+      p_severity_level: severityLevel,
+      p_success: success,
+      p_error_message: errorMessage,
+      p_metadata: metadata || {},
+    });
 
     if (error) throw error;
     return data;
   }
 
   // Log multiple activities at once
-  static async logBulkActivities(activities: Array<{
-    actionType: string;
-    entityType: string;
-    entityId?: string;
-    entityName?: string;
-    oldValues?: any;
-    newValues?: any;
-    severityLevel?: 'info' | 'warning' | 'error' | 'critical';
-    success?: boolean;
-    errorMessage?: string;
-    metadata?: any;
-  }>): Promise<number> {
+  static async logBulkActivities(
+    activities: Array<{
+      actionType: string;
+      entityType: string;
+      entityId?: string;
+      entityName?: string;
+      oldValues?: any;
+      newValues?: any;
+      severityLevel?: 'info' | 'warning' | 'error' | 'critical';
+      success?: boolean;
+      errorMessage?: string;
+      metadata?: any;
+    }>
+  ): Promise<number> {
     const logs = activities.map(activity => ({
       action_type: activity.actionType,
       entity_type: activity.entityType,
@@ -98,11 +99,10 @@ export class ActivityLogService {
       severity_level: activity.severityLevel || 'info',
       success: activity.success ?? true,
       error_message: activity.errorMessage,
-      metadata: activity.metadata || {}
+      metadata: activity.metadata || {},
     }));
 
-    const { data, error } = await supabase
-      .rpc('log_bulk_activities', { p_logs: logs });
+    const { data, error } = await supabase.rpc('log_bulk_activities', { p_logs: logs });
 
     if (error) throw error;
     return data;
@@ -166,11 +166,10 @@ export class ActivityLogService {
 
   // Get activity statistics
   static async getActivityStats(userId?: string, days: number = 30): Promise<ActivityLogStats> {
-    const { data, error } = await supabase
-      .rpc('get_activity_stats', {
-        p_user_id: userId,
-        p_days: days
-      });
+    const { data, error } = await supabase.rpc('get_activity_stats', {
+      p_user_id: userId,
+      p_days: days,
+    });
 
     if (error) throw error;
     return data;
@@ -197,8 +196,7 @@ export class ActivityLogService {
 
   // Clean old logs (for maintenance)
   static async cleanOldLogs(daysToKeep: number = 90): Promise<number> {
-    const { data, error } = await supabase
-      .rpc('clean_old_logs', { p_days_to_keep: daysToKeep });
+    const { data, error } = await supabase.rpc('clean_old_logs', { p_days_to_keep: daysToKeep });
 
     if (error) throw error;
     return data;
@@ -219,7 +217,7 @@ export class ActivityLogService {
       {
         user_agent: userAgent,
         ip_address: ipAddress,
-        description: 'User successfully logged in'
+        description: 'User successfully logged in',
       }
     );
   }
@@ -241,7 +239,11 @@ export class ActivityLogService {
   }
 
   // Log failed login attempt
-  static async logFailedLogin(errorMessage: string, userAgent?: string, ipAddress?: string): Promise<string> {
+  static async logFailedLogin(
+    errorMessage: string,
+    userAgent?: string,
+    ipAddress?: string
+  ): Promise<string> {
     return this.logActivity(
       'login_failed',
       'user',
@@ -255,13 +257,17 @@ export class ActivityLogService {
       {
         user_agent: userAgent,
         ip_address: ipAddress,
-        description: 'Failed login attempt'
+        description: 'Failed login attempt',
       }
     );
   }
 
   // Log asset creation
-  static async logAssetCreation(assetId: string, assetName: string, assetData: any): Promise<string> {
+  static async logAssetCreation(
+    assetId: string,
+    assetName: string,
+    assetData: any
+  ): Promise<string> {
     return this.logActivity(
       'create',
       'asset',
@@ -277,7 +283,12 @@ export class ActivityLogService {
   }
 
   // Log asset update
-  static async logAssetUpdate(assetId: string, assetName: string, oldData: any, newData: any): Promise<string> {
+  static async logAssetUpdate(
+    assetId: string,
+    assetName: string,
+    oldData: any,
+    newData: any
+  ): Promise<string> {
     return this.logActivity(
       'update',
       'asset',
@@ -293,7 +304,11 @@ export class ActivityLogService {
   }
 
   // Log asset deletion
-  static async logAssetDeletion(assetId: string, assetName: string, assetData: any): Promise<string> {
+  static async logAssetDeletion(
+    assetId: string,
+    assetName: string,
+    assetData: any
+  ): Promise<string> {
     return this.logActivity(
       'delete',
       'asset',
@@ -314,34 +329,38 @@ export class ActivityLogService {
       'create',
       'issue',
       issueId,
-      issueData.title || 'Issue #' + issueId,
+      issueData.title || `Issue #${issueId}`,
       undefined,
       issueData,
       'info',
       true,
       undefined,
-      { 
+      {
         description: `Issue created for asset: ${assetId}`,
-        asset_id: assetId
+        asset_id: assetId,
       }
     );
   }
 
   // Log transfer creation
-  static async logTransferCreation(transferId: string, assetId: string, transferData: any): Promise<string> {
+  static async logTransferCreation(
+    transferId: string,
+    assetId: string,
+    transferData: any
+  ): Promise<string> {
     return this.logActivity(
       'create',
       'transfer',
       transferId,
-      'Transfer #' + transferId,
+      `Transfer #${transferId}`,
       undefined,
       transferData,
       'info',
       true,
       undefined,
-      { 
+      {
         description: `Transfer initiated from ${transferData.from_lab} to ${transferData.to_lab}`,
-        asset_id: assetId
+        asset_id: assetId,
       }
     );
   }
@@ -407,7 +426,9 @@ export class ActivityLogService {
     const { data, error } = await supabase
       .from('enhanced_activity_logs')
       .select('*')
-      .or(`entity_name.ilike.%${searchTerm}%,error_message.ilike.%${searchTerm}%,metadata->>description.ilike.%${searchTerm}%`)
+      .or(
+        `entity_name.ilike.%${searchTerm}%,error_message.ilike.%${searchTerm}%,metadata->>description.ilike.%${searchTerm}%`
+      )
       .order('created_at', { ascending: false })
       .limit(limit);
 

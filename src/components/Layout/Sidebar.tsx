@@ -50,21 +50,23 @@ const Sidebar: React.FC<SidebarProps> = ({ activeTab, setActiveTab }) => {
   };
 
   return (
-    <div className={`${
+    <div
+      className={`${
         collapsed ? 'w-20' : 'w-64'
-      } h-screen bg-white/10 dark:bg-gray-800 backdrop-blur-lg border border-white/20 dark:border-white/20 shadow-lg transition-all duration-300 flex flex-col`}>
-      <div className="p-4 flex items-center justify-between">
-        {!collapsed && <h2 className="text-xl font-bold text-gray">Menu</h2>}
+      } h-screen bg-white/10 dark:bg-gray-800 backdrop-blur-lg border border-white/20 dark:border-white/20 shadow-lg transition-all duration-300 flex flex-col`}
+    >
+      <div className='p-4 flex items-center justify-between'>
+        {!collapsed && <h2 className='text-xl font-bold text-gray'>Menu</h2>}
         <button
           onClick={toggleCollapse}
-          className="text-gray-500 hover:text-gray-900 transition-colors"
+          className='text-gray-500 hover:text-gray-900 transition-colors'
         >
           {collapsed ? <ChevronRight size={20} /> : <ChevronLeft size={20} />}
         </button>
       </div>
 
-      <nav className="flex-1 space-y-2 px-2">
-        {getMenuItems().map((item) => {
+      <nav className='flex-1 space-y-2 px-2'>
+        {getMenuItems().map(item => {
           const Icon = item.icon;
           const isActive = activeTab === item.id;
           return (
@@ -77,8 +79,8 @@ const Sidebar: React.FC<SidebarProps> = ({ activeTab, setActiveTab }) => {
                   : 'text-gray-500 dark:text-gray-400 hover:bg-gray-800 hover:text-white'
               }`}
             >
-              <Icon className="w-5 h-5" />
-              {!collapsed && <span className="text-sm">{item.label}</span>}
+              <Icon className='w-5 h-5' />
+              {!collapsed && <span className='text-sm'>{item.label}</span>}
             </button>
           );
         })}

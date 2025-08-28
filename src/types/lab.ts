@@ -5,9 +5,8 @@ export interface Lab {
   name: string;
   description: string;
   location: string;
-  incharge_id: string;
-  incharge_name?: string;
-  incharge_role?: string;
+  lab_identifier: string; // Add lab_identifier field
+  // Removed incharge fields
   staff_count?: number;
   asset_count?: number;
   open_issues_count?: number;
@@ -19,7 +18,7 @@ export interface LabStaff {
   id: string;
   lab_id: string;
   user_id: string;
-  role: 'incharge' | 'assistant' | 'lab incharge';
+  role: 'assistant';
   assigned_at: string;
   user_name?: string;
   user_role?: string;
@@ -55,7 +54,7 @@ export interface LabAccess {
   lab_id: string;
   lab_name: string;
   user_role: string;
-  lab_role: 'incharge' | 'assistant' | 'lab incharge';
+  lab_role: 'assistant';
   assigned_at: string;
 }
 
@@ -63,14 +62,16 @@ export interface CreateLabRequest {
   name: string;
   description?: string;
   location?: string;
-  incharge_id?: string;
+  lab_identifier: string; // Add lab_identifier field
+  // Removed incharge_id
 }
 
 export interface UpdateLabRequest {
   name?: string;
   description?: string;
   location?: string;
-  incharge_id?: string;
+  lab_identifier?: string; // Add lab_identifier field
+  // Removed incharge_id
 }
 
 export interface CreateLabIssueRequest {
@@ -94,13 +95,13 @@ export interface UpdateLabIssueRequest {
 
 export interface AssignStaffRequest {
   user_id: string;
-  role: 'incharge' | 'assistant' | 'lab incharge';
+  role: 'assistant';
 }
 
 export interface LabFilters {
   search?: string;
   location?: string;
-  incharge_id?: string;
+  // Removed incharge_id filter
   has_open_issues?: boolean;
   sort_by?: 'name' | 'created_at' | 'updated_at';
   sort_order?: 'asc' | 'desc';

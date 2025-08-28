@@ -11,15 +11,7 @@ import {
   Legend,
 } from 'chart.js';
 
-ChartJS.register(
-  CategoryScale,
-  LinearScale,
-  BarElement,
-  ArcElement,
-  Title,
-  Tooltip,
-  Legend
-);
+ChartJS.register(CategoryScale, LinearScale, BarElement, ArcElement, Title, Tooltip, Legend);
 
 interface ChartCardProps {
   title: string;
@@ -73,8 +65,10 @@ const ChartCard: React.FC<ChartCardProps> = ({ title, type, data, className = ''
   };
 
   return (
-    <div className={`bg-white dark:bg-gray-800 rounded-lg shadow-sm border border-gray-200 dark:border-gray-700 p-6 ${className}`}>
-      <div className="h-64">{renderChart()}</div>
+    <div
+      className={`bg-white dark:bg-gray-800 rounded-lg shadow-sm border border-gray-200 dark:border-gray-700 p-6 ${className}`}
+    >
+      <div className='h-64'>{renderChart()}</div>
     </div>
   );
 };

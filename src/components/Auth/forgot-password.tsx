@@ -9,7 +9,7 @@ interface LocationState {
   email?: string;
 }
 
-export function ForgotPassword(): JSX.Element {
+export function ForgotPassword() {
   const location = useLocation();
   const navigate = useNavigate();
   const [email, setEmail] = useState<string>('');
@@ -44,9 +44,10 @@ export function ForgotPassword(): JSX.Element {
     setLoading(true);
 
     // Call Supabase to send password reset email
-    supabase.auth.resetPasswordForEmail(email, {
-      redirectTo: `${window.location.origin}/update-password`,
-    })
+    supabase.auth
+      .resetPasswordForEmail(email, {
+        redirectTo: `${window.location.origin}/update-password`,
+      })
       .then(({ error }) => {
         setLoading(false);
         if (error) {
@@ -64,25 +65,25 @@ export function ForgotPassword(): JSX.Element {
 
   if (success) {
     return (
-      <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-gray-900 to-indigo-900 p-4">
-        <div className="w-full max-w-md bg-white/10 backdrop-blur-lg rounded-2xl shadow-xl border border-white/20 overflow-hidden transform transition-all hover:scale-[1.01] duration-300">
-          <div className="p-8 text-center">
-            <div className="w-20 h-20 bg-gradient-to-r from-green-500 to-emerald-600 rounded-full flex items-center justify-center mx-auto shadow-lg mb-6">
-              <Mail className="h-10 w-10 text-white" />
+      <div className='min-h-screen flex items-center justify-center bg-gradient-to-br from-gray-900 to-indigo-900 p-4'>
+        <div className='w-full max-w-md bg-white/10 backdrop-blur-lg rounded-2xl shadow-xl border border-white/20 overflow-hidden transform transition-all hover:scale-[1.01] duration-300'>
+          <div className='p-8 text-center'>
+            <div className='w-20 h-20 bg-gradient-to-r from-green-500 to-emerald-600 rounded-full flex items-center justify-center mx-auto shadow-lg mb-6'>
+              <Mail className='h-10 w-10 text-white' />
             </div>
-            <h2 className="text-3xl font-bold text-white mb-4">Check Your Email</h2>
-            <p className="text-white/80 mb-6">
+            <h2 className='text-3xl font-bold text-white mb-4'>Check Your Email</h2>
+            <p className='text-white/80 mb-6'>
               We've sent a password reset link to <strong>{email}</strong>
             </p>
-            <p className="text-white/60 text-sm mb-6">
+            <p className='text-white/60 text-sm mb-6'>
               Click the link in the email to reset your password. The link will expire shortly.
             </p>
             <Button
-              variant="gradient"
-              text="Back to Sign In"
+              variant='gradient'
+              text='Back to Sign In'
               fullWidth={true}
               onClick={() => navigate('/signin')}
-              className="mt-6 shadow-lg hover:shadow-green-500/20"
+              className='mt-6 shadow-lg hover:shadow-green-500/20'
             />
           </div>
         </div>
@@ -91,45 +92,45 @@ export function ForgotPassword(): JSX.Element {
   }
 
   return (
-    <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-gray-900 to-indigo-900 p-4">
-      <div className="w-full max-w-md bg-white/10 backdrop-blur-lg rounded-2xl shadow-xl border border-white/20 overflow-hidden transform transition-all hover:scale-[1.01] duration-300">
-        <div className="p-8 text-center">
-          <div className="w-20 h-20 bg-gradient-to-r from-indigo-500 to-purple-600 rounded-full flex items-center justify-center mx-auto shadow-lg mb-6">
-            <KeySquare className="h-10 w-10 text-white" />
+    <div className='min-h-screen flex items-center justify-center bg-gradient-to-br from-gray-900 to-indigo-900 p-4'>
+      <div className='w-full max-w-md bg-white/10 backdrop-blur-lg rounded-2xl shadow-xl border border-white/20 overflow-hidden transform transition-all hover:scale-[1.01] duration-300'>
+        <div className='p-8 text-center'>
+          <div className='w-20 h-20 bg-gradient-to-r from-indigo-500 to-purple-600 rounded-full flex items-center justify-center mx-auto shadow-lg mb-6'>
+            <KeySquare className='h-10 w-10 text-white' />
           </div>
-          <h2 className="text-3xl font-bold text-white mb-6">Reset Password</h2>
-          <p className="text-white/80 mb-6">
+          <h2 className='text-3xl font-bold text-white mb-6'>Reset Password</h2>
+          <p className='text-white/80 mb-6'>
             Enter your email address and we'll send you a link to reset your password.
           </p>
 
           {error && (
-            <div className="bg-red-500/20 text-red-100 px-4 py-3 rounded-lg mb-6 text-sm border border-red-500/30">
+            <div className='bg-red-500/20 text-red-100 px-4 py-3 rounded-lg mb-6 text-sm border border-red-500/30'>
               {error}
             </div>
           )}
 
-          <form onSubmit={handleSubmit} className="space-y-5">
+          <form onSubmit={handleSubmit} className='space-y-5'>
             <Input
-              label="Email Address"
-              type="email"
+              label='Email Address'
+              type='email'
               value={email}
-              name="email"
-              onChange={(e) => setEmail(e.target.value)}
-              placeholder="Enter your email address"
-              className="bg-white/5 border-white/10 text-white"
+              name='email'
+              onChange={e => setEmail(e.target.value)}
+              placeholder='Enter your email address'
+              className='bg-white/5 border-white/10 text-white'
             />
 
             <Button
-              variant="gradient"
-              text="Send Reset Link"
+              variant='gradient'
+              text='Send Reset Link'
               fullWidth={true}
               loading={loading}
-              className="mt-6 shadow-lg hover:shadow-indigo-500/20"
+              className='mt-6 shadow-lg hover:shadow-indigo-500/20'
             />
 
-            <p className="text-white/60 text-sm text-center pt-4">
+            <p className='text-white/60 text-sm text-center pt-4'>
               Remember your password?{' '}
-              <Link to="/signin" className="text-indigo-300 hover:text-white font-medium">
+              <Link to='/signin' className='text-indigo-300 hover:text-white font-medium'>
                 Sign in
               </Link>
             </p>

@@ -13,7 +13,13 @@ export class ExcelExportService {
   }
 
   // Helper: Add subtitle (merged, centered)
-  static addSubtitle(sheet: ExcelJS.Worksheet, subtitle: string, row: number, colStart = 1, colEnd = 8) {
+  static addSubtitle(
+    sheet: ExcelJS.Worksheet,
+    subtitle: string,
+    row: number,
+    colStart = 1,
+    colEnd = 8
+  ) {
     sheet.mergeCells(row, colStart, row, colEnd);
     const cell = sheet.getCell(row, colStart);
     cell.value = subtitle;
@@ -21,7 +27,13 @@ export class ExcelExportService {
   }
 
   // Helper: Add summary table starting at given row
-  static addSummary(sheet: ExcelJS.Worksheet, summaryData: [string, string | number][], startRow: number, colLabel = 1, colValue = 2) {
+  static addSummary(
+    sheet: ExcelJS.Worksheet,
+    summaryData: [string, string | number][],
+    startRow: number,
+    colLabel = 1,
+    colValue = 2
+  ) {
     sheet.mergeCells(startRow - 1, colLabel, startRow - 1, colValue);
     const headerCell = sheet.getCell(startRow - 1, colLabel);
     headerCell.value = 'Summary';
@@ -46,7 +58,12 @@ export class ExcelExportService {
   }
 
   // Helper: Add headers row with fill color and center alignment
-  static addHeaders(sheet: ExcelJS.Worksheet, row: number, headers: string[], fillColorHex: string) {
+  static addHeaders(
+    sheet: ExcelJS.Worksheet,
+    row: number,
+    headers: string[],
+    fillColorHex: string
+  ) {
     headers.forEach((header, i) => {
       const cell = sheet.getCell(row, i + 1);
       cell.value = header;
@@ -54,14 +71,14 @@ export class ExcelExportService {
       cell.fill = {
         type: 'pattern',
         pattern: 'solid',
-        fgColor: { argb: fillColorHex }
+        fgColor: { argb: fillColorHex },
       };
       cell.alignment = { horizontal: 'center' };
       cell.border = {
         top: { style: 'thin' },
         bottom: { style: 'thin' },
         left: { style: 'thin' },
-        right: { style: 'thin' }
+        right: { style: 'thin' },
       };
     });
   }
@@ -79,7 +96,9 @@ export class ExcelExportService {
       fileName += '.xlsx';
     }
     const buffer = await workbook.xlsx.writeBuffer();
-    const blob = new Blob([buffer], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' });
+    const blob = new Blob([buffer], {
+      type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+    });
     const url = URL.createObjectURL(blob);
     const link = document.createElement('a');
     link.href = url;
@@ -89,7 +108,11 @@ export class ExcelExportService {
   }
 
   // Export Assets Report
-  static async exportAssetsToExcel(assets: Asset[], analytics: AssetAnalytics, fileName = 'assets-report.xlsx') {
+  static async exportAssetsToExcel(
+    assets: Asset[],
+    analytics: AssetAnalytics,
+    fileName = 'assets-report.xlsx'
+  ) {
     const workbook = new ExcelJS.Workbook();
 
     // --- Asset Details Sheet ---
@@ -105,7 +128,7 @@ export class ExcelExportService {
       ['Total Quantity', analytics.totalQuantity],
       ['Total Cost', analytics.totalCost],
       ['Approved Assets', analytics.approvedAssets],
-      ['Pending Approval', analytics.pendingAssets]
+      ['Pending Approval', analytics.pendingAssets],
     ];
     this.addSummary(sheet, summaryData, 4);
 
@@ -139,14 +162,14 @@ export class ExcelExportService {
         statusCell.fill = {
           type: 'pattern',
           pattern: 'solid',
-          fgColor: { argb: 'FF22C55E' } // green
+          fgColor: { argb: 'FF22C55E' }, // green
         };
       } else {
         statusCell.value = '⚠️ Pending';
         statusCell.fill = {
           type: 'pattern',
           pattern: 'solid',
-          fgColor: { argb: 'FFF87171' } // red
+          fgColor: { argb: 'FFF87171' }, // red
         };
       }
       statusCell.font = { bold: true };
@@ -262,7 +285,11 @@ export class ExcelExportService {
   }
 
   // Export Issues Report (similar structure, can be extended similarly)
-  static async exportIssuesToExcel(issues: AssetIssue[], analytics: IssueAnalytics, fileName = 'issues-report.xlsx') {
+  static async exportIssuesToExcel(
+    issues: AssetIssue[],
+    analytics: IssueAnalytics,
+    fileName = 'issues-report.xlsx'
+  ) {
     const workbook = new ExcelJS.Workbook();
 
     // --- Issue Details Sheet ---
@@ -279,7 +306,7 @@ export class ExcelExportService {
       ['Resolution Rate', `${analytics.resolutionRate.toFixed(1)}%`],
       ['Estimated Repair Cost', analytics.costAnalysis.estimatedRepairCost],
       ['Replacement Cost', analytics.costAnalysis.replacementCost],
-      ['Total Potential Cost', analytics.costAnalysis.totalPotentialCost]
+      ['Total Potential Cost', analytics.costAnalysis.totalPotentialCost],
     ];
     this.addSummary(sheet, summaryData, 4, 1, 2);
 
@@ -307,14 +334,14 @@ export class ExcelExportService {
         statusCell.fill = {
           type: 'pattern',
           pattern: 'solid',
-          fgColor: { argb: 'FF22C55E' } // green
+          fgColor: { argb: 'FF22C55E' }, // green
         };
       } else if (status === 'open') {
         statusCell.value = '⚠️ Open';
         statusCell.fill = {
           type: 'pattern',
           pattern: 'solid',
-          fgColor: { argb: 'FFF87171' } // red
+          fgColor: { argb: 'FFF87171' }, // red
         };
       } else {
         statusCell.value = issue.status;
@@ -359,7 +386,7 @@ export class ExcelExportService {
     const costData: [string, number][] = [
       ['Estimated Repair Cost', analytics.costAnalysis.estimatedRepairCost],
       ['Replacement Cost', analytics.costAnalysis.replacementCost],
-      ['Total Potential Cost', analytics.costAnalysis.totalPotentialCost]
+      ['Total Potential Cost', analytics.costAnalysis.totalPotentialCost],
     ];
 
     costData.forEach(([label, value], i) => {

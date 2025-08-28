@@ -32,14 +32,10 @@ export const ThemeProvider: React.FC<{ children: React.ReactNode }> = ({ childre
   const contextValue: ThemeContextType = {
     theme,
     toggleTheme,
-    isDark: theme === 'dark'
+    isDark: theme === 'dark',
   };
 
-  return (
-    <ThemeContext.Provider value={contextValue}>
-      {children}
-    </ThemeContext.Provider>
-  );
+  return <ThemeContext.Provider value={contextValue}>{children}</ThemeContext.Provider>;
 };
 
 // Custom hook to use the ThemeContext

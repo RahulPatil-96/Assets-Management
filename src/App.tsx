@@ -1,16 +1,17 @@
-import React, { useState } from 'react';
+import React, { useState, lazy, Suspense } from 'react';
 import { BrowserRouter as Router, Routes, Route } from 'react-router-dom';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { AuthProvider, useAuth } from './contexts/AuthContext';
 import { NotificationProvider } from './contexts/NotificationContext';
 import { ThemeProvider } from './contexts/ThemeContext';
-import { lazy, Suspense } from 'react';
 import LoginForm from './components/Auth/LoginForm';
 import { ForgotPassword } from './components/Auth/forgot-password';
 import { UpdatePassword } from './components/Auth/update-password';
 import Navbar from './components/Layout/Navbar';
 import Sidebar from './components/Layout/Sidebar';
 import { Toaster } from 'react-hot-toast';
+import { Lab } from './types/lab';
+import LabTable from './components/Labs/LabTable';
 
 // Lazy load components for better performance
 const Dashboard = lazy(() => import('./components/Dashboard/Dashboard'));
@@ -19,6 +20,7 @@ const IssueList = lazy(() => import('./components/Issues/IssueList'));
 const TransferList = lazy(() => import('./components/Transfers/TransferList'));
 
 const MainApp: React.FC = () => {
+  const [_labs, _setLabs] = useState<Lab[]>([]); // State for labs
   const [searchTerm, setSearchTerm] = useState('');
   const { user, profile, loading } = useAuth();
   const [activeTab, setActiveTab] = useState('dashboard');
@@ -27,10 +29,21 @@ const MainApp: React.FC = () => {
     setSearchTerm(term);
   };
 
+  // const fetchLabs = async () => {
+  //   if (profile && profile.role === 'HOD') {
+  //     try {
+  //       const fetchedLabs = await LabService.getLabs();
+  //       setLabs(fetchedLabs);
+  //     } catch (_error) {
+  //       // console.error('Error fetching labs:', _error);
+  //     }
+  //   }
+  // };
+
   if (loading) {
     return (
-      <div className="min-h-screen bg-gray-100 dark:bg-gray-900 flex items-center justify-center">
-        <div className="animate-spin rounded-full h-32 w-32 border-b-2 border-blue-600"></div>
+      <div className='min-h-screen bg-gray-100 dark:bg-gray-900 flex items-center justify-center'>
+        <div className='animate-spin rounded-full h-32 w-32 border-b-2 border-blue-600'></div>
       </div>
     );
   }
@@ -41,12 +54,12 @@ const MainApp: React.FC = () => {
 
   const renderContent = () => {
     const LoadingFallback = () => (
-      <div className="p-6">
-        <div className="animate-pulse">
-          <div className="h-8 bg-gray-200 dark:bg-gray-700 rounded w-1/4 mb-6"></div>
-          <div className="space-y-4">
+      <div className='p-6'>
+        <div className='animate-pulse'>
+          <div className='h-8 bg-gray-200 dark:bg-gray-700 rounded w-1/4 mb-6'></div>
+          <div className='space-y-4'>
             {[1, 2, 3].map(i => (
-              <div key={i} className="h-20 bg-gray-200 dark:bg-gray-700 rounded"></div>
+              <div key={i} className='h-20 bg-gray-200 dark:bg-gray-700 rounded'></div>
             ))}
           </div>
         </div>
@@ -112,26 +125,42 @@ const MainApp: React.FC = () => {
         );
       case 'settings':
         return (
-          <div className="p-6">
-            <h1 className="text-2xl font-bold text-gray-900 dark:text-white mb-6">Settings</h1>
-            <div className="space-y-6">
-              <div className="bg-white dark:bg-gray-800 rounded-lg shadow-sm border border-gray-200 dark:border-gray-700 p-6">
-                <h2 className="text-lg font-semibold text-gray-900 dark:text-white mb-4">User Profile</h2>
-                <div className="space-y-4">
+          <div className='p-6'>
+            <h1 className='text-2xl font-bold text-gray-900 dark:text-white mb-6'>Settings</h1>
+            <div className='space-y-6'>
+              <div className='bg-white dark:bg-gray-800 rounded-lg shadow-sm border border-gray-200 dark:border-gray-700 p-6'>
+                <h2 className='text-lg font-semibold text-gray-900 dark:text-white mb-4'>
+                  User Profile
+                </h2>
+                <div className='space-y-4'>
                   <div>
-                    <label className="block text-sm font-medium text-gray-700 dark:text-gray-300">Name</label>
-                    <p className="mt-1 text-sm text-gray-900 dark:text-white">{profile.name}</p>
+                    <label className='block text-sm font-medium text-gray-700 dark:text-gray-300'>
+                      Name
+                    </label>
+                    <p className='mt-1 text-sm text-gray-900 dark:text-white'>{profile.name}</p>
                   </div>
                   <div>
-                    <label className="block text-sm font-medium text-gray-700 dark:text-gray-300">Role</label>
-                    <p className="mt-1 text-sm text-gray-900 dark:text-white">{profile.role}</p>
+                    <label className='block text-sm font-medium text-gray-700 dark:text-gray-300'>
+                      Role
+                    </label>
+                    <p className='mt-1 text-sm text-gray-900 dark:text-white'>{profile.role}</p>
                   </div>
                   <div>
-                    <label className="block text-sm font-medium text-gray-700 dark:text-gray-300">Lab ID</label>
-                    <p className="mt-1 text-sm text-gray-900 dark:text-white">{profile.lab_id}</p>
+                    <label className='block text-sm font-medium text-gray-700 dark:text-gray-300'>
+                      Lab ID
+                    </label>
+                    <p className='mt-1 text-sm text-gray-900 dark:text-white'>{profile.lab_id}</p>
                   </div>
                 </div>
               </div>
+              {profile.role === 'HOD' && (
+                <div className='bg-white dark:bg-gray-800 rounded-lg shadow-sm border border-gray-200 dark:border-gray-700 p-6'>
+                  <h2 className='text-lg font-semibold text-gray-900 dark:text-white mb-4'>
+                    Lab Management
+                  </h2>
+                  <LabTable />
+                </div>
+              )}
             </div>
           </div>
         );
@@ -145,13 +174,11 @@ const MainApp: React.FC = () => {
   };
 
   return (
-    <div className="min-h-screen bg-gray-100 dark:bg-gray-900">
+    <div className='min-h-screen bg-gray-100 dark:bg-gray-900'>
       <Navbar onSearch={handleSearch} />
-      <div className="flex">
+      <div className='flex'>
         <Sidebar activeTab={activeTab} setActiveTab={setActiveTab} />
-        <div className="flex-1 overflow-auto">
-          {renderContent()}
-        </div>
+        <div className='flex-1 overflow-auto'>{renderContent()}</div>
       </div>
     </div>
   );
@@ -159,26 +186,24 @@ const MainApp: React.FC = () => {
 
 const queryClient = new QueryClient();
 
-const App: React.FC = () => {
-  return (
-    <Router>
-      <ThemeProvider>
-        <AuthProvider>
-          <NotificationProvider>
-            <QueryClientProvider client={queryClient}>
-              <Routes>
-                <Route path="/forgot-password" element={<ForgotPassword />} />
-                <Route path="/update-password" element={<UpdatePassword />} />
-                <Route path="/signin" element={<LoginForm />} />
-                <Route path="/" element={<MainApp />} />
-              </Routes>
-              <Toaster position="top-right" />
-            </QueryClientProvider>
-          </NotificationProvider>
-        </AuthProvider>
-      </ThemeProvider>
-    </Router>
-  );
-}
+const App: React.FC = () => (
+  <Router>
+    <ThemeProvider>
+      <AuthProvider>
+        <NotificationProvider>
+          <QueryClientProvider client={queryClient}>
+            <Routes>
+              <Route path='/forgot-password' element={<ForgotPassword />} />
+              <Route path='/update-password' element={<UpdatePassword />} />
+              <Route path='/signin' element={<LoginForm />} />
+              <Route path='/' element={<MainApp />} />
+            </Routes>
+            <Toaster position='top-right' />
+          </QueryClientProvider>
+        </NotificationProvider>
+      </AuthProvider>
+    </ThemeProvider>
+  </Router>
+);
 
 export default App;

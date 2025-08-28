@@ -6,14 +6,16 @@ const validateInput = (input: string, fieldName: string): void => {
   if (typeof input !== 'string') {
     throw new Error(`Invalid input type for ${fieldName}. Expected string.`);
   }
-  
+
   // Basic validation to prevent SQL injection and other vulnerabilities
   const regex = /^[a-zA-Z0-9\s.,\-_@()]*$/; // Allow alphanumeric characters, spaces, and safe punctuation
-  
+
   if (!regex.test(input)) {
-    throw new Error(`Invalid characters in ${fieldName}. Only alphanumeric characters, spaces, and basic punctuation are allowed.`);
+    throw new Error(
+      `Invalid characters in ${fieldName}. Only alphanumeric characters, spaces, and basic punctuation are allowed.`
+    );
   }
-  
+
   // Length validation
   if (input.length > 255) {
     throw new Error(`${fieldName} is too long. Maximum length is 255 characters.`);
@@ -66,7 +68,7 @@ export class NotificationService {
           table: 'notifications',
           filter: `user_id=eq.${userId}`,
         },
-        (payload) => {
+        payload => {
           callback(payload.new as Notification);
         }
       )
@@ -87,10 +89,10 @@ export class NotificationService {
       .range(offset, offset + limit - 1);
 
     if (error) throw error;
-    
+
     // Get actor names for notifications that have actor_id
     const notificationsWithActors = await Promise.all(
-      (data || []).map(async (notification) => {
+      (data || []).map(async notification => {
         if (notification.actor_id) {
           try {
             const { data: actorData } = await supabase
@@ -98,16 +100,16 @@ export class NotificationService {
               .select('name')
               .eq('id', notification.actor_id)
               .single();
-            
+
             return {
               ...notification,
-              actor_name: actorData?.name || ''
+              actor_name: actorData?.name || '',
             };
           } catch (actorError) {
             console.warn('Failed to fetch actor name:', actorError);
             return {
               ...notification,
-              actor_name: ''
+              actor_name: '',
             };
           }
         }
@@ -167,15 +169,14 @@ export class NotificationService {
     validateUUID(entityId, 'entityId');
     validateInput(entityName, 'entityName');
 
-    const { data, error } = await supabase
-      .rpc('create_notification', {
-        action_type: actionType,
-        entity_id: entityId,
-        entity_name: entityName,
-        entity_type: entityType,
-        actor_id: actorId,
-        target_auth_id: userId
-      });
+    const { data, error } = await supabase.rpc('create_notification', {
+      action_type: actionType,
+      entity_id: entityId,
+      entity_name: entityName,
+      entity_type: entityType,
+      actor_id: actorId,
+      target_auth_id: userId,
+    });
 
     if (error) throw error;
     return data;
@@ -206,14 +207,13 @@ export class NotificationService {
 
       if (actorError) throw actorError;
 
-      // Use a direct SQL query to insert all notifications at once
-      // This prevents individual real-time events from triggering for each notification
-      const { error } = await supabase.rpc('create_bulk_notification_silent', {
-        p_action_type: actionType,
-        p_entity_id: entityId,
-        p_entity_name: entityName,
-        p_entity_type: entityType,
-        p_actor_id: actorData.auth_id
+      // Use the existing create_notification function for each notification
+      const { error } = await supabase.rpc('create_notification', {
+        action_type: actionType,
+        entity_id: entityId,
+        entity_name: entityName,
+        entity_type: entityType,
+        actor_id: actorData.auth_id,
       });
 
       if (error) throw error;
@@ -239,7 +239,7 @@ export class NotificationService {
 
     const icon = actionIcon[notification.action_type as keyof typeof actionIcon] || '📢';
     const toastColor = this.getToastColor(notification.action_type);
-    
+
     toast(`${icon} ${notification.message}`, {
       duration: 4000,
       position: 'top-right',
@@ -280,20 +280,20 @@ export class NotificationService {
     if (diffInSeconds < 3600) return `${Math.floor(diffInSeconds / 60)}m ago`;
     if (diffInSeconds < 86400) return `${Math.floor(diffInSeconds / 3600)}h ago`;
     if (diffInSeconds < 604800) return `${Math.floor(diffInSeconds / 86400)}d ago`;
-    
+
     return date.toLocaleDateString();
   }
 
   // Group notifications by date
   static groupNotificationsByDate(notifications: Notification[]) {
     const groups: { [key: string]: Notification[] } = {};
-    
+
     notifications.forEach(notification => {
       const date = new Date(notification.created_at);
       const today = new Date();
       const yesterday = new Date(today);
       yesterday.setDate(yesterday.getDate() - 1);
-      
+
       let key: string;
       if (date.toDateString() === today.toDateString()) {
         key = 'Today';
@@ -302,11 +302,11 @@ export class NotificationService {
       } else {
         key = date.toLocaleDateString('en-US', { weekday: 'long', month: 'short', day: 'numeric' });
       }
-      
+
       if (!groups[key]) groups[key] = [];
       groups[key].push(notification);
     });
-    
+
     return groups;
   }
 }

@@ -4,7 +4,9 @@ const supabaseUrl = import.meta.env.VITE_SUPABASE_URL;
 const supabaseAnonKey = import.meta.env.VITE_SUPABASE_ANON_KEY;
 
 if (!supabaseUrl || !supabaseAnonKey) {
-  throw new Error('Missing Supabase environment variables. Please click "Connect to Supabase" in the top right.');
+  throw new Error(
+    'Missing Supabase environment variables. Please click "Connect to Supabase" in the top right.'
+  );
 }
 
 export const supabase = createClient(supabaseUrl, supabaseAnonKey);
@@ -52,6 +54,7 @@ export interface Asset {
 }
 
 export interface AssetIssue {
+  lab_name: string | undefined;
   id: string;
   asset_id: string;
   issue_description: string;

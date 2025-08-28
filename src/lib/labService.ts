@@ -1,25 +1,23 @@
 import { supabase } from './supabase';
-import { 
-  Lab, 
-  LabStaff, 
-  LabIssue, 
-  CreateLabRequest, 
-  UpdateLabRequest, 
-  CreateLabIssueRequest, 
+import {
+  Lab,
+  LabStaff,
+  LabIssue,
+  CreateLabRequest,
+  UpdateLabRequest,
+  CreateLabIssueRequest,
   UpdateLabIssueRequest,
   AssignStaffRequest,
   LabFilters,
   LabIssueFilters,
-  type LabAccess
+  type LabAccess,
 } from '../types/lab';
 
 // Lab Management Service
 export class LabService {
   // Lab CRUD operations
   static async getLabs(filters?: LabFilters): Promise<Lab[]> {
-    let query = supabase
-      .from('labs')
-      .select('*');
+  let query = supabase.from('labs').select(`*`);
 
     if (filters?.search) {
       query = query.ilike('name', `%${filters.search}%`);
@@ -29,9 +27,7 @@ export class LabService {
       query = query.ilike('location', `%${filters.location}%`);
     }
 
-    if (filters?.incharge_id) {
-      query = query.eq('incharge_id', filters.incharge_id);
-    }
+  // Removed incharge_id filter as labs no longer have incharge
 
     if (filters?.has_open_issues) {
       query = query.gt('open_issues_count', 0);
@@ -47,22 +43,36 @@ export class LabService {
   }
 
   static async getLab(id: string): Promise<Lab | null> {
+    const { data, error } = await supabase.from('labs').select('*').eq('id', id).single();
+
+    if (error) throw error;
+    return data;
+  }
+
+  static async getLabByIdentifier(lab_identifier: string): Promise<Lab | null> {
     const { data, error } = await supabase
       .from('labs')
       .select('*')
-      .eq('id', id)
+      .eq('lab_identifier', lab_identifier)
       .single();
 
     if (error) throw error;
     return data;
   }
 
-  static async createLab(lab: CreateLabRequest): Promise<Lab> {
+  static async getLabIdentifier(labId: string): Promise<string | null> {
     const { data, error } = await supabase
       .from('labs')
-      .insert(lab)
-      .select()
+      .select('lab_identifier')
+      .eq('id', labId)
       .single();
+
+    if (error) throw error;
+    return data?.lab_identifier || null;
+  }
+
+  static async createLab(lab: CreateLabRequest): Promise<Lab> {
+    const { data, error } = await supabase.from('labs').insert(lab).select().single();
 
     if (error) throw error;
     return data;
@@ -81,10 +91,7 @@ export class LabService {
   }
 
   static async deleteLab(id: string): Promise<void> {
-    const { error } = await supabase
-      .from('labs')
-      .delete()
-      .eq('id', id);
+    const { error } = await supabase.from('labs').delete().eq('id', id);
 
     if (error) throw error;
   }
@@ -93,10 +100,12 @@ export class LabService {
   static async getLabStaff(labId: string): Promise<LabStaff[]> {
     const { data, error } = await supabase
       .from('lab_staff')
-      .select(`
+      .select(
+        `
         *,
         user:user_profiles(id, name, role)
-      `)
+      `
+      )
       .eq('lab_id', labId)
       .order('assigned_at', { ascending: false });
 
@@ -110,7 +119,7 @@ export class LabService {
       .insert({
         lab_id: labId,
         user_id: staff.user_id,
-        role: staff.role
+        role: staff.role,
       })
       .select()
       .single();
@@ -144,9 +153,7 @@ export class LabService {
 
   // Lab Issues Management
   static async getLabIssues(filters?: LabIssueFilters): Promise<LabIssue[]> {
-    let query = supabase
-      .from('lab_issues')
-      .select(`
+    let query = supabase.from('lab_issues').select(`
         *,
         lab:labs(id, name),
         reported_by_user:user_profiles!reported_by(id, name),
@@ -185,12 +192,14 @@ export class LabService {
   static async getLabIssue(id: string): Promise<LabIssue | null> {
     const { data, error } = await supabase
       .from('lab_issues')
-      .select(`
+      .select(
+        `
         *,
         lab:labs(id, name),
         reported_by_user:user_profiles!reported_by(id, name),
         assigned_to_user:user_profiles!assigned_to(id, name)
-      `)
+      `
+      )
       .eq('id', id)
       .single();
 
@@ -199,11 +208,7 @@ export class LabService {
   }
 
   static async createLabIssue(issue: CreateLabIssueRequest): Promise<LabIssue> {
-    const { data, error } = await supabase
-      .from('lab_issues')
-      .insert(issue)
-      .select()
-      .single();
+    const { data, error } = await supabase.from('lab_issues').insert(issue).select().single();
 
     if (error) throw error;
     return data;
@@ -222,10 +227,7 @@ export class LabService {
   }
 
   static async deleteLabIssue(id: string): Promise<void> {
-    const { error } = await supabase
-      .from('lab_issues')
-      .delete()
-      .eq('id', id);
+    const { error } = await supabase.from('lab_issues').delete().eq('id', id);
 
     if (error) throw error;
   }
@@ -268,12 +270,11 @@ export class LabService {
 
   // Permission checking
   static async checkLabPermission(userId: string, labId: string, action: string): Promise<boolean> {
-    const { data, error } = await supabase
-      .rpc('check_lab_permission', {
-        p_user_id: userId,
-        p_lab_id: labId,
-        p_action: action
-      });
+    const { data, error } = await supabase.rpc('check_lab_permission', {
+      p_user_id: userId,
+      p_lab_id: labId,
+      p_action: action,
+    });
 
     if (error) throw error;
     return data || false;

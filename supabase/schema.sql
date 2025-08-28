@@ -19,10 +19,21 @@ CREATE TYPE transfer_status AS ENUM ('pending', 'received');
 CREATE TABLE user_profiles (
   id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
   auth_id uuid NOT NULL UNIQUE REFERENCES auth.users(id) ON DELETE CASCADE,
-  email text NOT NULL,
+  email text NOT NULL UNIQUE,
   role user_role NOT NULL,
   name text NOT NULL,
   lab_id text NOT NULL,
+  created_at timestamptz DEFAULT now(),
+  updated_at timestamptz DEFAULT now()
+);
+
+-- Labs table
+CREATE TABLE labs (
+  id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+  name text NOT NULL,
+  description text,
+  location text NOT NULL,
+  lab_identifier text NOT NULL, -- New field added for lab identifier
   created_at timestamptz DEFAULT now(),
   updated_at timestamptz DEFAULT now()
 );
@@ -41,7 +52,7 @@ CREATE TABLE assets (
   total_amount numeric(10,2) GENERATED ALWAYS AS (quantity * rate) STORED,
   asset_id text,
   remark text,
-  allocated_lab text NOT NULL,
+allocated_lab uuid NOT NULL REFERENCES labs(id),
   created_by uuid REFERENCES user_profiles(id) ON DELETE SET NULL,
   approved boolean DEFAULT false,
   approved_by uuid REFERENCES user_profiles(id) ON DELETE SET NULL,
@@ -155,6 +166,26 @@ CREATE INDEX idx_activity_logs_severity ON activity_logs(severity_level);
 
 -- ===================================================================
 -- FUNCTIONS & TRIGGERS
+
+-- Function to update asset_ids when a lab's identifier changes
+CREATE OR REPLACE FUNCTION update_asset_ids_for_lab(lab_id text, new_lab_identifier text)
+RETURNS void AS $$
+DECLARE
+  asset_row RECORD;
+  asset_number integer;
+  new_asset_id text;
+BEGIN
+  FOR asset_row IN SELECT * FROM assets WHERE allocated_lab = lab_id LOOP
+    -- Extract asset type and number from the old asset_id
+    asset_number := COALESCE(
+      CAST(SUBSTRING(asset_row.asset_id FROM '.*-(\d+)$') AS INTEGER),
+      1
+    );
+    new_asset_id := generate_asset_id(new_lab_identifier, asset_row.asset_type, asset_number);
+    UPDATE assets SET asset_id = new_asset_id WHERE id = asset_row.id;
+  END LOOP;
+END;
+$$ LANGUAGE plpgsql;
 -- ===================================================================
 
 -- Function to generate asset ID
@@ -187,11 +218,22 @@ $$ LANGUAGE plpgsql;
 CREATE OR REPLACE FUNCTION set_asset_id() RETURNS TRIGGER AS $$
 DECLARE
     asset_number integer;
+    lab_identifier_value text;
 BEGIN
+    -- Get the lab identifier from the labs table
+    SELECT lab_identifier INTO lab_identifier_value 
+    FROM labs 
+WHERE id = NEW.allocated_lab;  -- No need for casting
+
+    -- If lab identifier not found, use the allocated_lab as fallback
+    IF lab_identifier_value IS NULL THEN
+        lab_identifier_value := NEW.allocated_lab;
+    END IF;
+
     -- Get the next asset number for the specific lab and asset type combination
     SELECT COALESCE(MAX(
         CASE 
-            WHEN asset_id IS NOT NULL AND asset_id LIKE '%' || NEW.allocated_lab || '/' || 
+            WHEN asset_id IS NOT NULL AND asset_id LIKE '%' || lab_identifier_value || '/' || 
                  CASE NEW.asset_type
                      WHEN 'cpu' THEN 'PC'
                      WHEN 'printer' THEN 'PR'
@@ -214,7 +256,7 @@ BEGIN
     WHERE allocated_lab = NEW.allocated_lab AND asset_type = NEW.asset_type;
 
     -- Generate the asset ID
-    NEW.asset_id := generate_asset_id(NEW.allocated_lab, NEW.asset_type, asset_number);
+    NEW.asset_id := generate_asset_id(lab_identifier_value, NEW.asset_type, asset_number);
     RETURN NEW;
 END;
 $$ LANGUAGE plpgsql;
@@ -758,12 +800,17 @@ CREATE TRIGGER trg_up_asset_transfers BEFORE UPDATE ON asset_transfers
 -- ===================================================================
 -- RLS POLICIES
 -- ===================================================================
+ALTER TABLE labs ENABLE ROW LEVEL SECURITY;
 ALTER TABLE user_profiles ENABLE ROW LEVEL SECURITY;
 ALTER TABLE assets ENABLE ROW LEVEL SECURITY;
 ALTER TABLE asset_issues ENABLE ROW LEVEL SECURITY;
 ALTER TABLE asset_transfers ENABLE ROW LEVEL SECURITY;
 ALTER TABLE notifications ENABLE ROW LEVEL SECURITY;
 ALTER TABLE activity_logs ENABLE ROW LEVEL SECURITY;
+
+-- labs: Allow authenticated users to insert labs
+CREATE POLICY labs_insert_all ON labs
+  FOR ALL USING (true) WITH CHECK (true);
 
 -- user_profiles: All authenticated users can see all profiles
 CREATE POLICY user_profiles_select_all ON user_profiles
@@ -810,45 +857,56 @@ GRANT ALL PRIVILEGES ON ALL SEQUENCES IN SCHEMA public TO service_role;
 -- SAMPLE DATA 
 -- ===================================================================
 
+-- Insert sample labs (must be inserted first due to foreign key constraints)
+INSERT INTO labs (name, description, location, lab_identifier, created_at, updated_at) VALUES
+('Computer Science Lab 01', 'Main computer lab with 50 workstations and servers', 'Building A, Room 101', 'CSLAB01', '2024-01-15T10:00:00Z', '2024-03-20T14:30:00Z'),
+('Mechanical Engineering Lab', 'Advanced mechanical engineering research lab', 'Building B, Room 205', 'MELAB01', '2024-02-10T09:15:00Z', '2024-03-25T11:45:00Z'),
+('Electronics Workshop', 'Electronics design and prototyping lab', 'Building C, Room 310', 'ELECLAB01', '2024-01-20T14:20:00Z', '2024-03-18T16:10:00Z'),
+('Physics Laboratory', 'Modern physics lab with specialized equipment', 'Building D, Room 115', 'PHYSLAB01', '2024-03-05T11:30:00Z', '2024-03-22T13:25:00Z'),
+('Chemistry Research Center', 'Chemistry research facility with fume hoods', 'Building E, Room 420', 'CHEMLAB01', '2024-01-08T08:45:00Z', '2024-03-28T10:15:00Z');
+
 -- Insert sample user profiles
 INSERT INTO user_profiles (auth_id, email, role, name, lab_id) VALUES
 ('734ed3f0-37a9-49d0-8388-ed24536ee246', 'hod@university.edu', 'HOD', 'Dr. John Smith', 'ADMIN'),
-('7c8785c1-8743-4618-86ea-3922554a5b87', 'labassistant@university.edu', 'Lab Assistant', 'Alice Johnson', 'CSE-LAB-01'),
-('3f732856-c91e-442c-8abf-5c529906f9d7', 'labincharge@university.edu', 'Lab Incharge', 'Prof. Robert Williams', 'CSE-LAB-01'),
-('2be9de39-516d-4c50-a7a4-c13c7e2fe6a6', 'labassistant2@university.edu', 'Lab Assistant', 'Bob Davis', 'MECH-LAB-01'),
-('61592b47-e1c0-49ce-a5e5-0fc7d7eed86a', 'labincharge2@university.edu', 'Lab Incharge', 'Dr. Sarah Miller', 'MECH-LAB-01');
+('7c8785c1-8743-4618-86ea-3922554a5b87', 'labassistant@university.edu', 'Lab Assistant', 'Alice Johnson', 'CSLAB01'),
+('3f732856-c91e-442c-8abf-5c529906f9d7', 'labincharge@university.edu', 'Lab Incharge', 'Prof. Robert Williams', 'CSLAB01'),
+('2be9de39-516d-4c50-a7a4-c13c7e2fe6a6', 'labassistant2@university.edu', 'Lab Assistant', 'Bob Davis', 'MELAB01'),
+('61592b47-e1c0-49ce-a5e5-0fc7d7eed86a', 'labincharge2@university.edu', 'Lab Incharge', 'Dr. Sarah Miller', 'MELAB01');
+
+-- Update labs with incharge information
+-- Removed lab incharge updates as incharge_id column no longer exists
 
 -- Insert sample assets (this will trigger logs and notifications)
 INSERT INTO assets (date, name_of_supply, asset_type, invoice_number, description, quantity, rate, allocated_lab, created_by, approved, approved_by, approved_by_lab_incharge, asset_id) VALUES
-('2024-01-15', 'Dell OptiPlex 7090', 'cpu', 'INV-2024-001', 'Desktop Computer Intel i7, 16GB RAM, 512GB SSD', 10, 75000.00, 'CSE-LAB-01', 
+('2024-01-15', 'Dell OptiPlex 7090', 'cpu', 'INV-2024-001', 'Desktop Computer Intel i7, 16GB RAM, 512GB SSD', 10, 75000.00, (SELECT id FROM labs WHERE lab_identifier = 'CSLAB01'), 
  (SELECT id FROM user_profiles WHERE name = 'Alice Johnson'), true, 
  (SELECT id FROM user_profiles WHERE name = 'Dr. John Smith'),
  (SELECT id FROM user_profiles WHERE name = 'Prof. Robert Williams'),
- 'RSCOE/CSBS/CSE-LAB-01/PC-1'),
+ 'RSCOE/CSBS/CSLAB01/PC-1'),
 
-('2024-01-20', 'HP LaserJet Pro M404dn', 'printer', 'INV-2024-002', 'Laser Printer Monochrome', 3, 25000.00, 'CSE-LAB-01',
+('2024-01-20', 'HP LaserJet Pro M404dn', 'printer', 'INV-2024-002', 'Laser Printer Monochrome', 3, 25000.00, (SELECT id FROM labs WHERE lab_identifier = 'CSLAB01'),
  (SELECT id FROM user_profiles WHERE name = 'Alice Johnson'), true,
  (SELECT id FROM user_profiles WHERE name = 'Dr. John Smith'),
  (SELECT id FROM user_profiles WHERE name = 'Prof. Robert Williams'),
- 'RSCOE/CSBS/CSE-LAB-01/PR-1'),
+ 'RSCOE/CSBS/CSLAB01/PR-1'),
 
-('2024-01-25', 'Cisco Catalyst 2960-X', 'network', 'INV-2024-003', 'Network Switch 48-port', 2, 45000.00, 'CSE-LAB-01',
+('2024-01-25', 'Cisco Catalyst 2960-X', 'network', 'INV-2024-003', 'Network Switch 48-port', 2, 45000.00, (SELECT id FROM labs WHERE lab_identifier = 'CSLAB01'),
  (SELECT id FROM user_profiles WHERE name = 'Alice Johnson'), true,
  (SELECT id FROM user_profiles WHERE name = 'Dr. John Smith'),
  (SELECT id FROM user_profiles WHERE name = 'Prof. Robert Williams'),
- 'RSCOE/CSBS/CSE-LAB-01/NW-1'),
+ 'RSCOE/CSBS/CSLAB01/NW-1'),
 
-('2024-02-01', 'Logitech C920 HD Pro', 'peripheral', 'INV-2024-004', 'Webcam Full HD 1080p', 15, 8000.00, 'MECH-LAB-01',
+('2024-02-01', 'Logitech C920 HD Pro', 'peripheral', 'INV-2024-004', 'Webcam Full HD 1080p', 15, 8000.00, (SELECT id FROM labs WHERE lab_identifier = 'MELAB01'),
  (SELECT id FROM user_profiles WHERE name = 'Bob Davis'), true,
  (SELECT id FROM user_profiles WHERE name = 'Dr. John Smith'),
  (SELECT id FROM user_profiles WHERE name = 'Dr. Sarah Miller'),
- 'RSCOE/CSBS/MECH-LAB-01/PE-1'),
+ 'RSCOE/CSBS/MELAB01/PE-1'),
 
-('2024-02-10', 'Arduino Uno R3', 'microcontroller', 'INV-2024-005', 'Microcontroller Board', 50, 1500.00, 'MECH-LAB-01',
+('2024-02-10', 'Arduino Uno R3', 'microcontroller', 'INV-2024-005', 'Microcontroller Board', 50, 1500.00, (SELECT id FROM labs WHERE lab_identifier = 'MELAB01'),
  (SELECT id FROM user_profiles WHERE name = 'Bob Davis'), true,
  (SELECT id FROM user_profiles WHERE name = 'Dr. John Smith'),
  (SELECT id FROM user_profiles WHERE name = 'Dr. Sarah Miller'),
- 'RSCOE/CSBS/MECH-LAB-01/MC-1');
+ 'RSCOE/CSBS/MELAB01/MC-1');
 
 -- Insert sample asset issues
 INSERT INTO asset_issues (asset_id, issue_description, reported_by, status) VALUES
@@ -867,7 +925,7 @@ INSERT INTO asset_issues (asset_id, issue_description, reported_by, status) VALU
 -- Insert sample asset transfers
 INSERT INTO asset_transfers (asset_id, from_lab, to_lab, initiated_by, status) VALUES
 ((SELECT id FROM assets WHERE name_of_supply = 'Logitech C920 HD Pro' LIMIT 1),
- 'MECH-LAB-01', 'CSE-LAB-01',
+ 'MELAB01', 'CSLAB01',
  (SELECT id FROM user_profiles WHERE name = 'Dr. Sarah Miller'), 'pending');
 
 -- Manual log entries for system events
@@ -877,6 +935,7 @@ INSERT INTO activity_logs (user_id, action_type, entity_type, entity_id, entity_
 ((SELECT auth_id FROM user_profiles WHERE name = 'Prof. Robert Williams'), 'login', 'system', NULL, 'User Login', 'info', true, '2024-01-16 09:00:00'),
 ((SELECT auth_id FROM user_profiles WHERE name = 'Bob Davis'), 'login', 'system', NULL, 'User Login', 'info', true, '2024-01-17 08:45:00'),
 ((SELECT auth_id FROM user_profiles WHERE name = 'Dr. Sarah Miller'), 'login', 'system', NULL, 'User Login', 'info', true, '2024-01-17 09:30:00');
+
 
 -- Manual notification entries
 INSERT INTO notifications (user_id, actor_id, action_type, entity_type, entity_id, entity_name, message, is_read, created_at) VALUES
@@ -901,7 +960,7 @@ INSERT INTO notifications (user_id, actor_id, action_type, entity_type, entity_i
 ((SELECT auth_id FROM user_profiles WHERE name = 'Dr. Sarah Miller'), 
  (SELECT auth_id FROM user_profiles WHERE name = 'Dr. Sarah Miller'),
  'created', 'transfer', 
- (SELECT id FROM asset_transfers WHERE from_lab = 'MECH-LAB-01' LIMIT 1),
+ (SELECT id FROM asset_transfers WHERE from_lab = 'MELAB01' LIMIT 1),
  'Asset Transfer', 'Asset transfer initiated: Logitech C920 HD Pro', false, '2024-01-17 14:20:00'),
 
 ((SELECT auth_id FROM user_profiles WHERE name = 'Dr. Sarah Miller'), 

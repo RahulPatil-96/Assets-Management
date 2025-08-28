@@ -50,9 +50,7 @@ export const NotificationProvider: React.FC<{ children: React.ReactNode }> = ({ 
   const markAsRead = async (id: string) => {
     try {
       await NotificationService.markAsRead(id);
-      setNotifications(prev =>
-        prev.map(n => (n.id === id ? { ...n, is_read: true } : n))
-      );
+      setNotifications(prev => prev.map(n => (n.id === id ? { ...n, is_read: true } : n)));
       setUnreadCount(prev => Math.max(0, prev - 1));
     } catch (error) {
       console.error('Error marking notification as read:', error);
@@ -80,16 +78,13 @@ export const NotificationProvider: React.FC<{ children: React.ReactNode }> = ({ 
       fetchNotifications();
 
       // Subscribe to real-time notifications
-      const unsubscribe = NotificationService.subscribeToNotifications(
-        user.id,
-        (newNotification) => {
-          setNotifications(prev => [newNotification, ...prev]);
-          setUnreadCount(prev => prev + 1);
-          NotificationService.showToast(newNotification);
-          // Play notification sound
-          notificationSoundService.playNotification();
-        }
-      );
+      const unsubscribe = NotificationService.subscribeToNotifications(user.id, newNotification => {
+        setNotifications(prev => [newNotification, ...prev]);
+        setUnreadCount(prev => prev + 1);
+        NotificationService.showToast(newNotification);
+        // Play notification sound
+        notificationSoundService.playNotification();
+      });
 
       return unsubscribe;
     }
@@ -104,9 +99,5 @@ export const NotificationProvider: React.FC<{ children: React.ReactNode }> = ({ 
     refreshNotifications,
   };
 
-  return (
-    <NotificationContext.Provider value={value}>
-      {children}
-    </NotificationContext.Provider>
-  );
+  return <NotificationContext.Provider value={value}>{children}</NotificationContext.Provider>;
 };

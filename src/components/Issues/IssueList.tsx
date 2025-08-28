@@ -1,9 +1,8 @@
 import React, { useState, useEffect } from 'react';
 import { useQuery } from '@tanstack/react-query';
-import { AlertTriangle, Plus, CheckCircle, User, Eye, BarChart3, Search } from 'lucide-react';
+import { AlertTriangle, Plus, CheckCircle, User, Eye, BarChart3 } from 'lucide-react';
 import { useAuth } from '../../contexts/AuthContext';
 import { supabase, AssetIssue } from '../../lib/supabase';
-import { NotificationService } from '../../lib/notificationService';
 import IssueForm from './IssueForm';
 import IssueDetailsModalWithErrorBoundary from './IssueDetailsModalWithErrorBoundary';
 import IssueAnalyticsDashboard from '../Analytics/IssueAnalyticsDashboard';
@@ -23,24 +22,40 @@ const IssueListComponent: React.FC<{ searchTerm: string }> = ({ searchTerm: prop
   const [remark, setRemark] = useState<string>('');
   const [costRequired, setCostRequired] = useState<string>('');
 
-const fetchIssues = async (): Promise<AssetIssue[]> => {
-    const { data, error } = await supabase
-      .from('asset_issues')
-      .select(`
-        *,
-        asset:assets(name_of_supply, allocated_lab, asset_id),
-        reporter:user_profiles!reported_by(name, role),
-        resolver:user_profiles!resolved_by(name, role)
-      `)
-      .order('reported_at', { ascending: false });
+  type AssetIssueWithLabName = AssetIssue & { lab_name?: string };
+  const fetchIssues = async (): Promise<AssetIssueWithLabName[]> => {
+    // Fetch issues and labs in parallel
+    const [{ data: issuesData, error: issuesError }, { data: labsData, error: labsError }] = await Promise.all([
+      supabase
+        .from('asset_issues')
+        .select(`*, asset:assets(name_of_supply, allocated_lab, asset_id), reporter:user_profiles!reported_by(name, role), resolver:user_profiles!resolved_by(name, role)`) // keep existing fields
+        .order('reported_at', { ascending: false }),
+      supabase
+        .from('labs')
+        .select('id, name'),
+    ]);
 
-    if (error) throw error;
-    return data || [];
+    if (issuesError) throw issuesError;
+    if (labsError) throw labsError;
+    // Map lab id to name
+    const labMap = new Map<string, string>();
+    (labsData || []).forEach((lab: { id: string; name: string }) => {
+      labMap.set(lab.id, lab.name);
+    });
+    // Attach lab name to each issue
+    return (issuesData || []).map((issue: any) => ({
+      ...issue,
+      lab_name: issue.asset ? labMap.get(issue.asset.allocated_lab) || issue.asset.allocated_lab : undefined,
+    }));
   };
 
-  const { data: issues = [], isLoading, refetch } = useQuery({
+  const {
+    data: issues = [],
+    isLoading,
+    refetch,
+  } = useQuery({
     queryKey: ['issues'],
-    queryFn: fetchIssues
+    queryFn: fetchIssues,
   });
 
   useEffect(() => {
@@ -65,12 +80,22 @@ const fetchIssues = async (): Promise<AssetIssue[]> => {
     };
   }, [refetch]);
 
-  const handleResolve = async (issueId: string, remarkText: string = '', costRequiredValue: string = '') => {
+  const handleResolve = async (
+    issueId: string,
+    remarkText: string = '',
+    costRequiredValue: string = ''
+  ) => {
     try {
-      const updateData: any = {
+      const updateData: {
+        status: string;
+        resolved_by: string | undefined;
+        resolved_at: string;
+        remark?: string;
+        cost_required?: number;
+      } = {
         status: 'resolved',
         resolved_by: profile?.id,
-        resolved_at: new Date().toISOString()
+        resolved_at: new Date().toISOString(),
       };
 
       if (remarkText.trim()) {
@@ -81,30 +106,14 @@ const fetchIssues = async (): Promise<AssetIssue[]> => {
         updateData.cost_required = parseFloat(costRequiredValue);
       }
 
-      const { error } = await supabase
-        .from('asset_issues')
-        .update(updateData)
-        .eq('id', issueId);
+      const { error } = await supabase.from('asset_issues').update(updateData).eq('id', issueId);
 
       if (error) throw error;
 
-      // Create notification for all users about the resolved issue
-      if (profile?.id) {
-        await NotificationService.createNotificationForAllUsers(
-          profile.id,
-          'resolved',
-          'issue',
-          issueId,
-          'Issue Resolved'
-        );
-      }
-
-      refetch();
-      setResolvingIssue(null);
-      setRemark('');
+      // Only reset costRequired and handle errors
       setCostRequired('');
-    } catch (error) {
-      console.error('Error resolving issue:', error);
+    } catch (_error) {
+      // console.error('Error resolving issue:', _error);
     }
   };
 
@@ -118,30 +127,30 @@ const fetchIssues = async (): Promise<AssetIssue[]> => {
     }
   };
 
-  const getStatusColor = (status: string) => {
-    return status === 'resolved' ? 'text-green-600' : 'text-red-600';
-  };
+  const getStatusColor = (status: string) =>
+    status === 'resolved' ? 'text-green-600' : 'text-red-600';
 
-  const getStatusIcon = (status: string) => {
-    return status === 'resolved' ? CheckCircle : AlertTriangle;
-  };
+  const getStatusIcon = (status: string) => (status === 'resolved' ? CheckCircle : AlertTriangle);
 
   const handleViewDetails = (issue: AssetIssue) => {
     setViewingIssue(issue);
   };
 
-  const canResolve = (issue: AssetIssue) => {
-    return profile?.role === 'Lab Assistant' && issue.status === 'open';
-  };
+  const canResolve = (issue: AssetIssue) =>
+    profile?.role === 'Lab Assistant' && issue.status === 'open';
 
   const filteredIssues = issues.filter(issue => {
-    const matchesSearch = propSearchTerm === '' || 
-                         issue.asset?.name_of_supply?.toLowerCase().includes(propSearchTerm.toLowerCase()) ||
-                         (issue.asset?.asset_id && issue.asset.asset_id.toString().toLowerCase().includes(propSearchTerm.toLowerCase()));
+    const matchesSearch =
+      propSearchTerm === '' ||
+      issue.asset?.name_of_supply?.toLowerCase().includes(propSearchTerm.toLowerCase()) ||
+      (issue.asset?.asset_id &&
+        issue.asset.asset_id.toString().toLowerCase().includes(propSearchTerm.toLowerCase()));
     const matchesStatus = filterStatus === 'all' || issue.status === filterStatus;
     const matchesLab = filterLab === 'all' || issue.asset?.allocated_lab === filterLab;
-    const matchesType = filterType === 'all' || issue.asset?.name_of_supply?.toLowerCase().includes(filterType.toLowerCase());
-    
+    const matchesType =
+      filterType === 'all' ||
+      issue.asset?.name_of_supply?.toLowerCase().includes(filterType.toLowerCase());
+
     const issueDate = new Date(issue.reported_at);
     const from = new Date(fromDate);
     const to = new Date(toDate);
@@ -152,12 +161,12 @@ const fetchIssues = async (): Promise<AssetIssue[]> => {
 
   if (isLoading) {
     return (
-      <div className="p-6">
-        <div className="animate-pulse">
-          <div className="h-8 bg-gray-200 rounded w-1/4 mb-6"></div>
-          <div className="space-y-4">
+      <div className='p-6'>
+        <div className='animate-pulse'>
+          <div className='h-8 bg-gray-200 rounded w-1/4 mb-6'></div>
+          <div className='space-y-4'>
             {[1, 2, 3].map(i => (
-              <div key={i} className="h-24 bg-gray-200 rounded"></div>
+              <div key={i} className='h-24 bg-gray-200 rounded'></div>
             ))}
           </div>
         </div>
@@ -166,29 +175,29 @@ const fetchIssues = async (): Promise<AssetIssue[]> => {
   }
 
   return (
-    <div className="p-6">
-      <div className="flex justify-between items-center mb-6">
-        <h1 className="text-2xl font-bold text-gray-900 dark:text-gray-100">
+    <div className='p-6'>
+      <div className='flex justify-between items-center mb-6'>
+        <h1 className='text-2xl font-bold text-gray-900 dark:text-gray-100'>
           {profile?.role === 'Lab Incharge' ? 'Report Issues' : 'Issue Management'}
         </h1>
-        <div className="flex items-center space-x-4">
+        <div className='flex items-center space-x-4'>
           <button
             onClick={() => setShowForm(true)}
-            className="bg-red-600 text-white px-4 py-2 rounded-lg hover:bg-red-700 dark:bg-red-700 dark:hover:bg-red-800 flex items-center space-x-2 transition-colors"
+            className='bg-red-600 text-white px-4 py-2 rounded-lg hover:bg-red-700 dark:bg-red-700 dark:hover:bg-red-800 flex items-center space-x-2 transition-colors'
           >
-            <Plus className="w-4 h-4" />
+            <Plus className='w-4 h-4' />
             <span>Report Issue</span>
           </button>
           <ExportButton
             data={filteredIssues}
-            type="issues"
+            type='issues'
             disabled={filteredIssues.length === 0}
           />
         </div>
       </div>
 
       {/* Tab Navigation */}
-      <div className="flex border-b border-gray-200 dark:border-gray-700 mb-6">
+      <div className='flex border-b border-gray-200 dark:border-gray-700 mb-6'>
         <button
           onClick={() => setActiveTab('list')}
           className={`px-4 py-2 font-medium text-sm ${
@@ -197,7 +206,7 @@ const fetchIssues = async (): Promise<AssetIssue[]> => {
               : 'text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-300'
           }`}
         >
-          <AlertTriangle className="w-4 h-4 inline mr-2" />
+          <AlertTriangle className='w-4 h-4 inline mr-2' />
           Issue List
         </button>
         <button
@@ -208,76 +217,93 @@ const fetchIssues = async (): Promise<AssetIssue[]> => {
               : 'text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-300'
           }`}
         >
-          <BarChart3 className="w-4 h-4 inline mr-2" />
+          <BarChart3 className='w-4 h-4 inline mr-2' />
           Analytics
         </button>
       </div>
 
-
       {/* Filters */}
-      <div className="bg-white dark:bg-gray-800 rounded-lg shadow-sm border border-gray-200 dark:border-gray-700 p-4 mb-6">
-        <div className="flex flex-col sm:flex-row gap-4">
+      <div className='bg-white dark:bg-gray-800 rounded-lg shadow-sm border border-gray-200 dark:border-gray-700 p-4 mb-6'>
+        <div className='flex flex-col sm:flex-row gap-4'>
           {/* Status Filter */}
-          <div className="flex items-center space-x-2">
+          <div className='flex items-center space-x-2'>
             <select
               value={filterStatus}
-              onChange={(e) => setFilterStatus(e.target.value)}
-              className="px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg focus:ring-2 focus:ring-red-500 focus:border-transparent dark:bg-gray-700 dark:text-gray-200"
+              onChange={e => setFilterStatus(e.target.value)}
+              className='px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg focus:ring-2 focus:ring-red-500 focus:border-transparent dark:bg-gray-700 dark:text-gray-200'
             >
-              <option value="all">All Status</option>
-              <option value="open">Open</option>
-              <option value="resolved">Resolved</option>
+              <option value='all'>All Status</option>
+              <option value='open'>Open</option>
+              <option value='resolved'>Resolved</option>
             </select>
           </div>
-          
+
           {/* Lab Filter */}
-          <div className="flex items-center space-x-2">
+          <div className='flex items-center space-x-2'>
             <select
               value={filterLab}
-              onChange={(e) => setFilterLab(e.target.value)}
-              className="px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg focus:ring-2 focus:ring-red-500 focus:border-transparent dark:bg-gray-700 dark:text-gray-200"
+              onChange={e => setFilterLab(e.target.value)}
+              className='px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg focus:ring-2 focus:ring-red-500 focus:border-transparent dark:bg-gray-700 dark:text-gray-200'
             >
-              <option value="all">All Labs</option>
-              {Array.from(new Set(issues.map(issue => issue.asset?.allocated_lab).filter(Boolean))).map(lab => (
-                <option key={lab} value={lab}>{lab}</option>
+              <option value='all'>All Labs</option>
+              {Array.from(
+                new Set(issues.map(issue => issue.asset?.allocated_lab).filter(Boolean))
+              ).map(lab => (
+                <option key={lab} value={lab}>
+                  {lab}
+                </option>
               ))}
             </select>
           </div>
-          
+
           {/* Asset Type Filter */}
-          <div className="flex items-center space-x-2">
+          <div className='flex items-center space-x-2'>
             <select
               value={filterType}
-              onChange={(e) => setFilterType(e.target.value)}
-              className="px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg focus:ring-2 focus:ring-red-500 focus:border-transparent dark:bg-gray-700 dark:text-gray-200"
+              onChange={e => setFilterType(e.target.value)}
+              className='px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg focus:ring-2 focus:ring-red-500 focus:border-transparent dark:bg-gray-700 dark:text-gray-200'
             >
-              <option value="all">All Types</option>
-              {Array.from(new Set(issues.map(issue => issue.asset?.name_of_supply).filter(Boolean))).map(type => (
-                <option key={type} value={type}>{type}</option>
+              <option value='all'>All Types</option>
+              {Array.from(
+                new Set(issues.map(issue => issue.asset?.name_of_supply).filter(Boolean))
+              ).map(type => (
+                <option key={type} value={type}>
+                  {type}
+                </option>
               ))}
             </select>
           </div>
-          
+
           {/* Date Filters */}
-          <div className="flex items-center space-x-2">
-            <label htmlFor="fromDate" className="text-gray-700 dark:text-gray-300 text-sm whitespace-nowrap">From:</label>
+          <div className='flex items-center space-x-2'>
+            <label
+              htmlFor='fromDate'
+              className='text-gray-700 dark:text-gray-300 text-sm whitespace-nowrap'
+            >
+              From:
+            </label>
             <input
-              type="date"
-              id="fromDate"
+              type='date'
+              id='fromDate'
               value={fromDate}
-              onChange={(e) => setFromDate(e.target.value)}
-              className="px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg focus:ring-2 focus:ring-red-500 focus:border-transparent dark:bg-gray-700 dark:text-gray-200"
+              onChange={e => setFromDate(e.target.value)}
+              className='px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg focus:ring-2 focus:ring-red-500 focus:border-transparent dark:bg-gray-700 dark:text-gray-200'
             />
           </div>
-          
-          <div className="flex items-center space-x-2">
-            <label htmlFor="toDate" className="text-gray-700 dark:text-gray-300 text-sm whitespace-nowrap">To:</label>
+
+          <div className='flex items-center space-x-2'>
+            <label
+              htmlFor='toDate'
+              className='text-gray-700 dark:text-gray-300 text-sm whitespace-nowrap'
+            >
+              To:
+            </label>
             <input
-              type="date"
-              id="toDate"
+              type='date'
+              id='toDate'
               value={toDate}
-              onChange={(e) => setToDate(e.target.value)}
-              className="px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg focus:ring-2 focus:ring-red-500 focus:border-transparent dark:bg-gray-700 dark:text-gray-200"
+              onChange={e => setToDate(e.target.value)}
+              className='px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg focus:ring-2 focus:ring-red-500 focus:border-transparent dark:bg-gray-700 dark:text-gray-200'
             />
           </div>
         </div>
@@ -287,70 +313,68 @@ const fetchIssues = async (): Promise<AssetIssue[]> => {
       {activeTab === 'list' ? (
         <>
           {/* Issues List */}
-          <div className="space-y-4">
+          <div className='space-y-4'>
             {filteredIssues.length === 0 ? (
-              <div className="text-center py-12 bg-white dark:bg-gray-800 rounded-lg shadow-sm border border-gray-200 dark:border-gray-700">
-                <AlertTriangle className="w-12 h-12 text-gray-300 dark:text-gray-600 mx-auto mb-4" />
-                <p className="text-gray-500 dark:text-gray-400">No issues found</p>
+              <div className='text-center py-12 bg-white dark:bg-gray-800 rounded-lg shadow-sm border border-gray-200 dark:border-gray-700'>
+                <AlertTriangle className='w-12 h-12 text-gray-300 dark:text-gray-600 mx-auto mb-4' />
+                <p className='text-gray-500 dark:text-gray-400'>No issues found</p>
               </div>
             ) : (
-              filteredIssues.map((issue) => {
+              filteredIssues.map(issue => {
                 const StatusIcon = getStatusIcon(issue.status);
                 return (
                   <div
                     key={issue.id}
-                    className="bg-white dark:bg-gray-800 rounded-lg shadow-sm border border-gray-200 dark:border-gray-700 p-6"
+                    className='bg-white dark:bg-gray-800 rounded-lg shadow-sm border border-gray-200 dark:border-gray-700 p-6'
                   >
-                    <div className="flex items-start justify-between">
-                      <div className="flex-1">
-                        <div className="flex items-center space-x-3 mb-2">
+                    <div className='flex items-start justify-between'>
+                      <div className='flex-1'>
+                        <div className='flex items-center space-x-3 mb-2'>
                           <StatusIcon className={`w-5 h-5 ${getStatusColor(issue.status)}`} />
                           <span className={`font-medium ${getStatusColor(issue.status)}`}>
                             {issue.status === 'resolved' ? 'Resolved' : 'Open'}
                           </span>
-                          <span className="text-gray-400 dark:text-gray-500">•</span>
-                          <span className="text-sm text-gray-500 dark:text-gray-400">
+                          <span className='text-gray-400 dark:text-gray-500'>•</span>
+                          <span className='text-sm text-gray-500 dark:text-gray-400'>
                             {new Date(issue.reported_at).toLocaleDateString()}
                           </span>
                         </div>
 
-                        <h3 className="font-semibold text-gray-900 dark:text-gray-100 mb-2">
+                        <h3 className='font-semibold text-gray-900 dark:text-gray-100 mb-2'>
                           Asset: {issue.asset?.name_of_supply}
                         </h3>
-                        <p className="text-gray-700 dark:text-gray-300 mb-3">{issue.issue_description}</p>
+                        <p className='text-gray-700 dark:text-gray-300 mb-3'>
+                          {issue.issue_description}
+                        </p>
                         {issue.status === 'resolved' && issue.remark && (
-                          <p className="text-gray-500 dark:text-gray-400 mt-2">
-                            <span className="font-medium">Remark:</span> {issue.remark}
+                          <p className='text-gray-500 dark:text-gray-400 mt-2'>
+                            <span className='font-medium'>Remark:</span> {issue.remark}
                           </p>
                         )}
 
-                        <div className="flex items-center space-x-4 text-sm text-gray-500 dark:text-gray-400">
-                          <div className="flex items-center space-x-1">
-                            <User className="w-4 h-4" />
+                        <div className='flex items-center space-x-4 text-sm text-gray-500 dark:text-gray-400'>
+                          <div className='flex items-center space-x-1'>
+                            <User className='w-4 h-4' />
                             <span>Reported by: {issue.reporter?.name || ''}</span>
                           </div>
-                          <span>Lab: {issue.asset?.allocated_lab}</span>
-                          {issue.resolver && (
-                            <span>Resolved by: {issue.resolver.name || ''}</span>
-                          )}
-                          {issue.resolved_by && !issue.resolver && (
-                            <span>Resolved by: </span>
-                          )}
+                          <span>Lab: {issue.lab_name || issue.asset?.allocated_lab}</span>
+                          {issue.resolver && <span>Resolved by: {issue.resolver.name || ''}</span>}
+                          {issue.resolved_by && !issue.resolver && <span>Resolved by: </span>}
                         </div>
                       </div>
 
-                      <div className="ml-4 flex space-x-2">
+                      <div className='ml-4 flex space-x-2'>
                         <button
                           onClick={() => handleViewDetails(issue)}
-                          className="text-gray-600 dark:text-gray-400 hover:text-gray-800 dark:hover:text-gray-300"
-                          title="View Details"
+                          className='text-gray-600 dark:text-gray-400 hover:text-gray-800 dark:hover:text-gray-300'
+                          title='View Details'
                         >
-                          <Eye className="w-5 h-5" />
+                          <Eye className='w-5 h-5' />
                         </button>
                         {canResolve(issue) && (
                           <button
                             onClick={() => handleResolveClick(issue)}
-                            className="bg-green-600 text-white px-3 py-1.5 rounded text-sm hover:bg-green-700 dark:bg-green-700 dark:hover:bg-green-800 transition-colors"
+                            className='bg-green-600 text-white px-3 py-1.5 rounded text-sm hover:bg-green-700 dark:bg-green-700 dark:hover:bg-green-800 transition-colors'
                           >
                             Resolve
                           </button>
@@ -368,12 +392,7 @@ const fetchIssues = async (): Promise<AssetIssue[]> => {
       )}
 
       {/* Issue Form Modal */}
-      {showForm && (
-        <IssueForm
-          onClose={() => setShowForm(false)}
-          onSave={refetch}
-        />
-      )}
+      {showForm && <IssueForm onClose={() => setShowForm(false)} onSave={refetch} />}
 
       {viewingIssue && (
         <IssueDetailsModalWithErrorBoundary
@@ -384,53 +403,55 @@ const fetchIssues = async (): Promise<AssetIssue[]> => {
 
       {/* Issue Resolve Modal */}
       {resolvingIssue && (
-        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
-          <div className="bg-white dark:bg-gray-800 rounded-lg shadow-xl max-w-md w-full p-6">
-            <h2 className="text-xl font-semibold text-gray-900 dark:text-gray-100 mb-4">Resolve Issue</h2>
-            
-            <div className="space-y-4 mb-4">
+        <div className='fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4'>
+          <div className='bg-white dark:bg-gray-800 rounded-lg shadow-xl max-w-md w-full p-6'>
+            <h2 className='text-xl font-semibold text-gray-900 dark:text-gray-100 mb-4'>
+              Resolve Issue
+            </h2>
+
+            <div className='space-y-4 mb-4'>
               <div>
-                <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
+                <label className='block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1'>
                   Remark (optional)
                 </label>
                 <textarea
                   value={remark}
-                  onChange={(e) => setRemark(e.target.value)}
-                  placeholder="Enter remark (optional)..."
-                  className="w-full border border-gray-300 dark:border-gray-600 rounded-lg p-3 h-24 resize-none"
+                  onChange={e => setRemark(e.target.value)}
+                  placeholder='Enter remark (optional)...'
+                  className='w-full border border-gray-300 dark:border-gray-600 rounded-lg p-3 h-24 resize-none'
                 />
               </div>
-              
+
               <div>
-                <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
+                <label className='block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1'>
                   Cost Required (optional)
                 </label>
                 <input
-                  type="number"
+                  type='number'
                   value={costRequired}
-                  onChange={(e) => setCostRequired(e.target.value)}
-                  placeholder="Enter cost amount (optional)..."
-                  className="w-full border border-gray-300 dark:border-gray-600 rounded-lg p-3"
-                  min="0"
-                  step="0.01"
+                  onChange={e => setCostRequired(e.target.value)}
+                  placeholder='Enter cost amount (optional)...'
+                  className='w-full border border-gray-300 dark:border-gray-600 rounded-lg p-3'
+                  min='0'
+                  step='0.01'
                 />
               </div>
             </div>
-            
-            <div className="flex justify-end space-x-3">
+
+            <div className='flex justify-end space-x-3'>
               <button
                 onClick={() => {
                   setResolvingIssue(null);
                   setRemark('');
                   setCostRequired('');
                 }}
-                className="px-4 py-2 text-gray-600 dark:text-gray-400 hover:text-gray-800 dark:hover:text-gray-300 border border-gray-300 dark:border-gray-600 rounded-lg"
+                className='px-4 py-2 text-gray-600 dark:text-gray-400 hover:text-gray-800 dark:hover:text-gray-300 border border-gray-300 dark:border-gray-600 rounded-lg'
               >
                 Cancel
               </button>
               <button
                 onClick={handleResolveWithRemark}
-                className="px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 dark:bg-green-700 dark:hover:bg-green-800"
+                className='px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 dark:bg-green-700 dark:hover:bg-green-800'
               >
                 Confirm Resolve
               </button>

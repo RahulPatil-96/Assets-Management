@@ -1,9 +1,10 @@
 import React, { useState } from 'react';
 import { Download, FileText, FileSpreadsheet } from 'lucide-react';
 import { ExportService, ExportFormat } from '../../lib/exportService';
+import { Asset, AssetIssue } from '../../lib/supabase';
 
 interface ExportButtonProps {
-  data: any[];
+  data: Asset[] | AssetIssue[];
   type: 'assets' | 'issues';
   fileName?: string;
   className?: string;
@@ -15,27 +16,37 @@ const ExportButton: React.FC<ExportButtonProps> = ({
   type,
   fileName,
   className = '',
-  disabled = false
+  disabled = false,
 }) => {
   const [isExporting, setIsExporting] = useState(false);
   const [showFormatMenu, setShowFormatMenu] = useState(false);
 
   const handleExport = async (format: ExportFormat) => {
     if (disabled || data.length === 0) return;
-    
+
     setIsExporting(true);
     setShowFormatMenu(false);
-    
+
     try {
       const exportFileName = fileName || ExportService.generateFileName(type, format);
-      
+
       if (type === 'assets') {
-        await ExportService.exportAssets(data, format, exportFileName);
+        // Type guard to ensure data is Asset[]
+        if (data.length > 0 && 'name_of_supply' in data[0]) {
+          await ExportService.exportAssets(data as Asset[], format, exportFileName);
+        } else {
+          throw new Error('Invalid data type for assets export');
+        }
       } else {
-        await ExportService.exportIssues(data, format, exportFileName);
+        // Type guard to ensure data is AssetIssue[]
+        if (data.length > 0 && 'issue_description' in data[0]) {
+          await ExportService.exportIssues(data as AssetIssue[], format, exportFileName);
+        } else {
+          throw new Error('Invalid data type for issues export');
+        }
       }
-    } catch (error) {
-      console.error(`Error exporting ${type} to ${format}:`, error);
+    } catch (_error) {
+      // console.error(`Error exporting ${type} to ${format}:`, _error);
       alert(`Failed to export ${type} report. Please try again.`);
     } finally {
       setIsExporting(false);
@@ -45,7 +56,7 @@ const ExportButton: React.FC<ExportButtonProps> = ({
   const formats = ExportService.getAvailableFormats();
 
   return (
-    <div className="relative inline-block">
+    <div className='relative inline-block'>
       <button
         onClick={() => setShowFormatMenu(!showFormatMenu)}
         disabled={disabled || data.length === 0}
@@ -55,27 +66,27 @@ const ExportButton: React.FC<ExportButtonProps> = ({
             : 'bg-blue-600 text-white hover:bg-blue-700 dark:bg-blue-700 dark:hover:bg-blue-800'
         } ${className}`}
       >
-        <Download className="w-4 h-4" />
+        <Download className='w-4 h-4' />
         <span>Export Report</span>
         {isExporting && (
-          <div className="ml-2 animate-spin rounded-full h-4 w-4 border-b-2 border-white"></div>
+          <div className='ml-2 animate-spin rounded-full h-4 w-4 border-b-2 border-white'></div>
         )}
       </button>
 
       {showFormatMenu && (
-        <div className="absolute right-0 mt-2 w-48 bg-white dark:bg-gray-800 rounded-lg shadow-lg border border-gray-200 dark:border-gray-700 z-10">
-          <div className="p-2">
-            {formats.map((format) => (
+        <div className='absolute right-0 mt-2 w-48 bg-white dark:bg-gray-800 rounded-lg shadow-lg border border-gray-200 dark:border-gray-700 z-10'>
+          <div className='p-2'>
+            {formats.map(format => (
               <button
                 key={format.value}
                 onClick={() => handleExport(format.value)}
                 disabled={isExporting}
-                className="flex items-center space-x-3 w-full px-3 py-2 text-sm text-gray-700 dark:text-gray-200 hover:bg-gray-100 dark:hover:bg-gray-700 rounded-md transition-colors"
+                className='flex items-center space-x-3 w-full px-3 py-2 text-sm text-gray-700 dark:text-gray-200 hover:bg-gray-100 dark:hover:bg-gray-700 rounded-md transition-colors'
               >
                 {format.value === 'pdf' ? (
-                  <FileText className="w-4 h-4 text-red-500" />
+                  <FileText className='w-4 h-4 text-red-500' />
                 ) : (
-                  <FileSpreadsheet className="w-4 h-4 text-green-500" />
+                  <FileSpreadsheet className='w-4 h-4 text-green-500' />
                 )}
                 <span>{format.label}</span>
               </button>
@@ -86,10 +97,7 @@ const ExportButton: React.FC<ExportButtonProps> = ({
 
       {/* Click outside to close menu */}
       {showFormatMenu && (
-        <div
-          className="fixed inset-0 z-0"
-          onClick={() => setShowFormatMenu(false)}
-        />
+        <div className='fixed inset-0 z-0' onClick={() => setShowFormatMenu(false)} />
       )}
     </div>
   );

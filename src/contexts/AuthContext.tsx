@@ -1,6 +1,7 @@
 import React, { createContext, useContext, useEffect, useState, useRef } from 'react';
 import { supabase } from '../lib/supabase';
 import { sendSupabasePing, shouldSendPing, PingResult } from '../lib/supabasePingService';
+import { LabService } from '../lib/labService';
 import { toast } from 'react-hot-toast';
 
 interface User {
@@ -29,8 +30,12 @@ interface AuthContextType {
   profile: Profile | null;
   loading: boolean;
   pingStatus: PingStatus;
-  signIn: (email: string, password: string, rememberMe?: boolean) => Promise<{ error: any }>;
-  signUp: (email: string, password: string, metadata?: any) => Promise<{ error: any }>;
+  signIn: (email: string, password: string, rememberMe?: boolean) => Promise<{ error: unknown }>;
+  signUp: (
+    email: string,
+    password: string,
+    metadata?: { name?: string; role?: string; labName?: string; lab_id?: string }
+  ) => Promise<{ error: unknown }>;
   signOut: () => Promise<void>;
   triggerPing: () => Promise<PingResult>;
 }
@@ -59,7 +64,7 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
     lastError: null,
     isPinging: false,
   });
-  const pingIntervalRef = useRef<NodeJS.Timeout | null>(null);
+  const pingIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
   useEffect(() => {
     let isMounted = true;
@@ -68,10 +73,12 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
     // Initialize auth state
     const initializeAuth = async () => {
       console.log('🔄 Initializing auth state...');
-      
+
       // Check current auth state without signing out
-      const { data: { session } } = await supabase.auth.getSession();
-      
+      const {
+        data: { session },
+      } = await supabase.auth.getSession();
+
       if (isMounted) {
         if (session) {
           // This should only happen after explicit sign-in
@@ -79,17 +86,31 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
             id: session.user.id,
             email: session.user.email || '',
           });
-          
-          const { data: profileData } = await supabase
+
+          console.log('🔍 Fetching user profile for auth_id:', session.user.id);
+          const { data: profileData, error: profileError } = await supabase
             .from('user_profiles')
             .select('*')
             .eq('auth_id', session.user.id)
             .single();
-            
+
           if (profileData) {
+            console.log('✅ Profile found:', {
+              id: profileData.id,
+              email: profileData.email,
+              role: profileData.role,
+              name: profileData.name,
+              lab_id: profileData.lab_id
+            });
+            console.log('🔍 Profile role:', profileData.role);
+            console.log('🔍 Profile name:', profileData.name);
             setProfile(profileData as Profile);
+          } else if (profileError) {
+            console.log('❌ Error fetching profile:', profileError.message);
+            console.log('📋 Profile error details:', profileError);
           }
         } else {
+          console.log('⚠️ No active session found');
           setUser(null);
           setProfile(null);
         }
@@ -99,11 +120,13 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
     };
 
     // Subscribe to auth state changes
-    const { data: { subscription } } = supabase.auth.onAuthStateChange(async (event, session) => {
+    const {
+      data: { subscription },
+    } = supabase.auth.onAuthStateChange(async (event, session) => {
       console.log('🔄 Auth state change:', {
         event,
         hasSession: !!session,
-        accessToken: session?.access_token ? 'Token exists' : 'No token'
+        accessToken: session?.access_token ? 'Token exists' : 'No token',
       });
 
       if (!isMounted) return;
@@ -119,92 +142,121 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
           id: session.user.id,
           email: session.user.email || '',
         });
-        
+
         // Check if user profile exists
+        console.log('🔍 Checking user profile for auth_id:', session.user.id);
         const { data: profileData, error: profileError } = await supabase
           .from('user_profiles')
           .select('*')
           .eq('auth_id', session.user.id)
           .single();
-          
+
         if (profileData) {
+          console.log('✅ Profile found during auth state change:', {
+            id: profileData.id,
+            email: profileData.email,
+            role: profileData.role,
+            name: profileData.name,
+            lab_id: profileData.lab_id
+          });
+          console.log('🔍 Profile role during auth state change:', profileData.role);
           setProfile(profileData as Profile);
         } else if (profileError && profileError.code === 'PGRST116') {
           // Profile doesn't exist, create it using the RPC function
           console.log('📝 Creating user profile for new user');
-          
+
           // Get user metadata from auth user
           const userMetadata = session.user.user_metadata;
           console.log('📋 User metadata:', userMetadata);
-          
+
           try {
-            const { data: rpcResult, error: rpcError } = await supabase
-              .rpc('create_user_profile', {
+            const { data: _rpcResult, error: _rpcError } = await supabase.rpc(
+              'create_user_profile',
+              {
                 p_auth_id: session.user.id,
                 p_email: session.user.email || '',
                 p_role: userMetadata?.role || 'Lab Assistant',
                 p_name: userMetadata?.name || '',
-                p_lab_id: userMetadata?.labId || userMetadata?.lab_id || 'CSE-LAB-01'
-              });
-              
-            console.log('📊 RPC call result:', { rpcResult, rpcError });
-              
-            if (rpcError) {
-              console.log('❌ Failed to create user profile via RPC:', rpcError.message);
-              console.log('📋 RPC error details:', rpcError);
-              
+                p_lab_id: userMetadata?.lab_id || await (async () => {
+                  try {
+                    const labs = await LabService.getLabs();
+                    return labs.find(lab => lab.name === userMetadata?.labName)?.id || '';
+                  } catch {
+                    return '';
+                  }
+                })(),
+              }
+            );
+
+            console.log('📊 RPC call result:', { rpcResult: _rpcResult, rpcError: _rpcError });
+
+            if (_rpcError) {
+              console.log('❌ Failed to create user profile via RPC:', _rpcError.message);
+              console.log('📋 RPC error details:', _rpcError);
+
               // Fallback: try direct insert with service role key
               console.log('🔄 Trying direct insert as fallback...');
               try {
                 const { data: directInsertResult, error: directError } = await supabase
                   .from('user_profiles')
-                  .insert([{
-                    auth_id: session.user.id,
-                    email: session.user.email || '',
-                    role: (userMetadata?.role || 'Lab Assistant') as any,
-                    name: userMetadata?.name || '',
-                    lab_id: userMetadata?.labId || userMetadata?.lab_id || 'CSE-LAB-01'
-                  }])
+                  .insert([
+                    {
+                      auth_id: session.user.id,
+                      email: session.user.email || '',
+                      role: (userMetadata?.role || 'Lab Assistant') as any,
+                      name: userMetadata?.name || '',
+                      lab_id: userMetadata?.labId || userMetadata?.lab_id || await (async () => {
+                        try {
+                          const labs = await LabService.getLabs();
+                          return labs[0]?.id || '';
+                        } catch {
+                          return '';
+                        }
+                      })(),
+                    },
+                  ])
                   .select();
-                  
+
                 if (directError) {
                   console.log('❌ Direct insert also failed:', directError.message);
                 } else if (directInsertResult && directInsertResult.length > 0) {
                   console.log('✅ User profile created via direct insert');
                   setProfile(directInsertResult[0] as Profile);
                 }
-              } catch (directError) {
-                console.log('❌ Error in direct insert fallback:', directError);
+              } catch (_directError) {
+                console.log('❌ Error in direct insert fallback:', _directError);
               }
             } else {
-              console.log('✅ User profile created successfully, profile ID:', rpcResult);
-              
+              console.log('✅ User profile created successfully, profile ID:', _rpcResult);
+
               // Fetch the newly created profile
               const { data: newProfile, error: fetchError } = await supabase
                 .from('user_profiles')
                 .select('*')
                 .eq('auth_id', session.user.id)
                 .single();
-                
+
               console.log('📊 Profile fetch result:', { newProfile, fetchError });
-                
+
               if (newProfile) {
                 setProfile(newProfile as Profile);
               } else if (fetchError) {
                 console.log('❌ Error fetching created profile:', fetchError.message);
               }
             }
-          } catch (rpcError) {
-            console.log('❌ Error creating user profile:', rpcError);
+          } catch (_rpcError) {
+            console.log('❌ Error creating user profile:', _rpcError);
           }
         } else if (profileError) {
           console.log('❌ Error fetching user profile:', profileError.message);
+          console.log('📋 Profile error details:', profileError);
         }
       } else {
+        console.log('⚠️ No session found - clearing user and profile');
         setUser(null);
         setProfile(null);
       }
-      
+
       setLoading(false);
     });
 
@@ -227,8 +279,8 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
 
     // Only setup ping interval if user is authenticated
     if (user) {
-      console.log('🔔 Setting up Supabase ping interval (2 days)');
-      
+      // console.log('🔔 Setting up Supabase ping interval (2 days)');
+
       // Check if we should send an immediate ping
       const lastPingTime = localStorage.getItem('supabase_last_ping');
       if (shouldSendPing(lastPingTime)) {
@@ -237,7 +289,7 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
 
       // Set up interval for future pings (2 days = 48 hours)
       const PING_INTERVAL_MS = 2 * 24 * 60 * 60 * 1000; // 2 days in milliseconds
-      
+
       pingIntervalRef.current = setInterval(() => {
         triggerPing();
       }, PING_INTERVAL_MS);
@@ -254,7 +306,7 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
 
   const triggerPing = async (): Promise<PingResult> => {
     if (!user) {
-      console.log('⏭️ Skipping ping - no authenticated user');
+      // console.log('⏭️ Skipping ping - no authenticated user');
       return {
         success: false,
         timestamp: new Date().toISOString(),
@@ -263,10 +315,10 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
     }
 
     setPingStatus(prev => ({ ...prev, isPinging: true }));
-    
+
     try {
       const result = await sendSupabasePing();
-      
+
       setPingStatus(prev => ({
         ...prev,
         lastPing: result.timestamp,
@@ -278,14 +330,14 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
       // Store last ping time in localStorage
       if (result.success) {
         localStorage.setItem('supabase_last_ping', result.timestamp);
-        console.log(`✅ Supabase ping stored: ${result.timestamp}`);
+        // console.log(`✅ Supabase ping stored: ${result.timestamp}`);
       }
 
       return result;
     } catch (error) {
       const errorMessage = error instanceof Error ? error.message : 'Unknown error';
       const timestamp = new Date().toISOString();
-      
+
       setPingStatus(prev => ({
         ...prev,
         lastPing: timestamp,
@@ -302,36 +354,42 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
     }
   };
 
-  const signIn = async (email: string, password: string, rememberMe: boolean = false) => {
-    console.log('🚀 Attempting sign-in for:', email, 'Remember me:', rememberMe);
-    
+  const signIn = async (
+    email: string,
+    password: string,
+    rememberMe: boolean = false
+  ): Promise<{ error: unknown }> => {
+
     // Set session persistence based on remember me option
     const { data, error } = await supabase.auth.signInWithPassword({
       email,
       password,
     });
-    
+
     if (data?.session) {
-      console.log('✅ Sign-in successful - token generated:', {
-        userId: data.session.user.id,
-        accessToken: data.session.access_token ? 'Token exists' : 'No token',
-        persistSession: rememberMe
-      });
-      
+      // console.log('✅ Sign-in successful - token generated:', {
+      //   userId: data.session.user.id,
+      //   accessToken: data.session.access_token ? 'Token exists' : 'No token',
+      //   persistSession: rememberMe,
+      // });
+
       // If remember me is false, we need to handle session persistence manually
       if (!rememberMe) {
         // For non-persistent sessions, we might need additional handling
         // Supabase handles this automatically based on the auth state
       }
     } else if (error) {
-      console.log('❌ Sign-in failed:', error.message);
+      // console.log('❌ Sign-in failed:', error.message);
     }
-    
+
     return { error };
   };
 
-const signUp = async (email: string, password: string, metadata?: { name?: string; role?: string; labId?: string; }) => {
-    console.log('📝 Attempting sign-up for:', email);
+const signUp = async (
+  email: string,
+  password: string,
+  metadata?: { name?: string; role?: string; labName?: string; lab_id?: string }
+): Promise<{ error: unknown }> => {
     const { data, error } = await supabase.auth.signUp({
       email,
       password,
@@ -341,7 +399,6 @@ const signUp = async (email: string, password: string, metadata?: { name?: strin
     });
 
     if (data?.user) {
-      console.log('✅ Auth user created, waiting for email confirmation');
       // Show success notification
       toast.success('Confirmation email sent! Please check your inbox to verify your account.', {
         duration: 5000,
@@ -349,35 +406,35 @@ const signUp = async (email: string, password: string, metadata?: { name?: strin
       });
       // Don't try to create profile immediately - wait for email confirmation
       // The profile will be created when the user confirms their email and signs in
-    } else if (error) {
-      console.log('❌ Sign-up failed:', error.message);
     }
 
     return { error };
   };
 
   const signOut = async () => {
-    console.log('🚪 Attempting sign-out...');
-    
+    // console.log('🚪 Attempting sign-out...');
+
     // Check if we have a valid session before attempting sign-out
-    const { data: { session } } = await supabase.auth.getSession();
+    const {
+      data: { session },
+    } = await supabase.auth.getSession();
     if (!session) {
-      console.log('⚠️ No active session found - clearing local state only');
+      // console.log('⚠️ No active session found - clearing local state only');
       setUser(null);
       setProfile(null);
       return;
     }
-    
+
     try {
       const { error } = await supabase.auth.signOut();
       if (error) {
-        console.log('❌ Sign-out failed:', error.message);
+        // console.log('❌ Sign-out failed:', error.message);
         throw error;
       } else {
-        console.log('✅ Sign-out successful - session cleared');
+        // console.log('✅ Sign-out successful - session cleared');
       }
     } catch (error) {
-      console.log('❌ Sign-out error:', error);
+      // console.log('❌ Sign-out error:', error);
       // Even if sign-out fails, clear local state to prevent stuck auth
       setUser(null);
       setProfile(null);
