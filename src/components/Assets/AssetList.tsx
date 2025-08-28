@@ -153,7 +153,8 @@ const fetchAssets = async (): Promise<Asset[]> => {
 
   const filteredAssets = assets.filter(asset => {
     const matchesSearch = asset.name_of_supply.toLowerCase().includes(searchTerm.toLowerCase()) ||
-                         asset.allocated_lab.toLowerCase().includes(searchTerm.toLowerCase());
+                         asset.allocated_lab.toLowerCase().includes(searchTerm.toLowerCase()) ||
+                         (asset.asset_id && asset.asset_id.toLowerCase().includes(searchTerm.toLowerCase()));
     
     const matchesStatus = filterStatus === 'all' || 
                          (filterStatus === 'approved' && asset.approved) ||

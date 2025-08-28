@@ -3,6 +3,7 @@ import { X, Save, Search } from 'lucide-react';
 import { useAuth } from '../../contexts/AuthContext';
 import { supabase, Asset } from '../../lib/supabase';
 import { NotificationService } from '../../lib/notificationService';
+import { Lab } from '../../types/lab';
 
 interface IssueFormProps {
   onClose: () => void;
@@ -10,6 +11,8 @@ interface IssueFormProps {
 }
 
 const IssueForm: React.FC<IssueFormProps> = ({ onClose, onSave }) => {
+  const [labs, setLabs] = useState<Lab[]>([]);
+  const [selectedLab, setSelectedLab] = useState<string>('');
   const { profile } = useAuth();
   const [loading, setLoading] = useState(false);
   const [assets, setAssets] = useState<Asset[]>([]);
@@ -21,7 +24,39 @@ const IssueForm: React.FC<IssueFormProps> = ({ onClose, onSave }) => {
 
   useEffect(() => {
     fetchAssets();
+    fetchLabs();
   }, []);
+
+  const fetchLabs = async () => {
+    try {
+      const { data, error } = await supabase
+        .from('assets')
+        .select('allocated_lab')
+        .eq('approved', true)
+        .order('allocated_lab');
+
+      if (error) throw error;
+      
+      // Get unique labs
+      const uniqueLabs = [...new Set(data?.map(asset => asset.allocated_lab) || [])];
+      console.log('Fetched labs:', uniqueLabs); // Debugging line
+      
+      // Convert to Lab-like objects for the dropdown
+      const labsData = uniqueLabs.map(labName => ({
+        id: labName,
+        name: labName,
+        description: '',
+        location: '',
+        incharge_id: '',
+        created_at: '',
+        updated_at: ''
+      }));
+      
+      setLabs(labsData);
+    } catch (error) {
+      console.error('Error fetching labs:', error);
+    }
+  };
 
   const fetchAssets = async () => {
     try {
@@ -38,47 +73,54 @@ const IssueForm: React.FC<IssueFormProps> = ({ onClose, onSave }) => {
     }
   };
 
-    const handleSubmit = async (e: React.FormEvent) => {
-      e.preventDefault();
-      setLoading(true);
-  
-      try {
-        const { data: newIssue, error } = await supabase
-          .from('asset_issues')
-          .insert({
-            ...formData,
-            reported_by: profile?.id,
-          })
-          .select()
-          .single();
-  
-        if (error) throw error;
+  const handleSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setLoading(true);
 
-        // Create notification for all users about the new issue
-        if (profile?.id && newIssue) {
-          await NotificationService.createNotificationForAllUsers(
-            profile.id,
-            'report',
-            'issue',
-            newIssue.id,
-            formData.issue_description
-          );
-        }
-  
-        onSave();
-        onClose();
-      } catch (error) {
-        console.error('Error reporting issue:', error);
-        alert('Error reporting issue. Please try again.');
-      } finally {
-        setLoading(false);
+    try {
+      const { data: newIssue, error } = await supabase
+        .from('asset_issues')
+        .insert({
+          ...formData,
+          lab_id: selectedLab,
+          reported_by: profile?.id,
+        })
+        .select()
+        .single();
+
+      if (error) throw error;
+
+      // Create notification for all users about the new issue
+      if (profile?.id && newIssue) {
+        await NotificationService.createNotificationForAllUsers(
+          profile.id,
+          'report',
+          'issue',
+          newIssue.id,
+          formData.issue_description
+        );
       }
-    };
 
-  const filteredAssets = assets.filter(asset =>
-    asset.name_of_supply.toLowerCase().includes(searchTerm.toLowerCase()) ||
-    asset.allocated_lab.toLowerCase().includes(searchTerm.toLowerCase())
-  );
+      onSave();
+      onClose();
+    } catch (error) {
+      console.error('Error reporting issue:', error);
+      alert('Error reporting issue. Please try again.');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const filteredAssets = assets.filter(asset => {
+    const matchesSearchTerm = asset.name_of_supply.toLowerCase().includes(searchTerm.toLowerCase()) ||
+      asset.allocated_lab.toLowerCase().includes(searchTerm.toLowerCase()) ||
+      asset.sr_no.toString().toLowerCase().includes(searchTerm.toLowerCase()) ||
+      (asset.asset_id && asset.asset_id.toLowerCase().includes(searchTerm.toLowerCase()));
+    
+    const matchesSelectedLab = selectedLab ? asset.allocated_lab === selectedLab : true;
+
+    return matchesSearchTerm && matchesSelectedLab;
+  });
 
   return (
     <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50">
@@ -96,13 +138,30 @@ const IssueForm: React.FC<IssueFormProps> = ({ onClose, onSave }) => {
         <form onSubmit={handleSubmit} className="p-6 space-y-4">
           <div>
             <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
+              Select Lab *
+            </label>
+            <select
+              value={selectedLab}
+              onChange={(e) => setSelectedLab(e.target.value)}
+              className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent dark:bg-gray-700 dark:text-gray-200"
+              required
+            >
+              <option value="">Select a lab</option>
+              {labs.map(lab => (
+                <option key={lab.id} value={lab.id}>{lab.name}</option>
+              ))}
+            </select>
+          </div>
+
+          <div>
+            <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
               Search and Select Asset *
             </label>
             <div className="relative mb-2">
               <Search className="w-5 h-5 text-gray-400 dark:text-gray-500 absolute left-3 top-2.5" />
               <input
                 type="text"
-                placeholder="Search assets..."
+                placeholder="Search by asset name, lab, or SR number..."
                 value={searchTerm}
                 onChange={(e) => setSearchTerm(e.target.value)}
                 className="w-full pl-10 pr-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent dark:bg-gray-700 dark:text-gray-200"
@@ -133,6 +192,11 @@ const IssueForm: React.FC<IssueFormProps> = ({ onClose, onSave }) => {
                       <p className="text-sm text-gray-500 dark:text-gray-400">
                         SR: {asset.sr_no} • Lab: {asset.allocated_lab}
                       </p>
+                      {asset.asset_id && (
+                        <p className="text-xs text-gray-400 dark:text-gray-500">
+                          ID: {asset.asset_id}
+                        </p>
+                      )}
                     </div>
                   </label>
                 ))
@@ -164,7 +228,7 @@ const IssueForm: React.FC<IssueFormProps> = ({ onClose, onSave }) => {
             </button>
             <button
               type="submit"
-              disabled={loading || !formData.asset_id || !formData.issue_description}
+              disabled={loading || !formData.asset_id || !formData.issue_description || !selectedLab}
               className="px-4 py-2 bg-red-600 text-white rounded-lg hover:bg-red-700 dark:bg-red-700 dark:hover:bg-red-800 flex items-center space-x-2 transition-colors disabled:opacity-50"
             >
               <Save className="w-4 h-4" />

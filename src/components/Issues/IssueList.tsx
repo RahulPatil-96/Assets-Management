@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { useQuery } from '@tanstack/react-query';
-import { AlertTriangle, Plus, CheckCircle, User, Eye, BarChart3 } from 'lucide-react';
+import { AlertTriangle, Plus, CheckCircle, User, Eye, BarChart3, Search } from 'lucide-react';
 import { useAuth } from '../../contexts/AuthContext';
 import { supabase, AssetIssue } from '../../lib/supabase';
 import { NotificationService } from '../../lib/notificationService';
@@ -9,7 +9,7 @@ import IssueDetailsModalWithErrorBoundary from './IssueDetailsModalWithErrorBoun
 import IssueAnalyticsDashboard from '../Analytics/IssueAnalyticsDashboard';
 import ExportButton from '../Export/ExportButton';
 
-const IssueListComponent: React.FC = () => {
+const IssueListComponent: React.FC<{ searchTerm: string }> = ({ searchTerm: propSearchTerm }) => {
   const { profile } = useAuth();
   const [fromDate, setFromDate] = useState<string>('');
   const [toDate, setToDate] = useState<string>('');
@@ -28,7 +28,7 @@ const fetchIssues = async (): Promise<AssetIssue[]> => {
       .from('asset_issues')
       .select(`
         *,
-        asset:assets(name_of_supply, allocated_lab),
+        asset:assets(name_of_supply, allocated_lab, asset_id),
         reporter:user_profiles!reported_by(name, role),
         resolver:user_profiles!resolved_by(name, role)
       `)
@@ -135,6 +135,9 @@ const fetchIssues = async (): Promise<AssetIssue[]> => {
   };
 
   const filteredIssues = issues.filter(issue => {
+    const matchesSearch = propSearchTerm === '' || 
+                         issue.asset?.name_of_supply?.toLowerCase().includes(propSearchTerm.toLowerCase()) ||
+                         (issue.asset?.asset_id && issue.asset.asset_id.toString().toLowerCase().includes(propSearchTerm.toLowerCase()));
     const matchesStatus = filterStatus === 'all' || issue.status === filterStatus;
     const matchesLab = filterLab === 'all' || issue.asset?.allocated_lab === filterLab;
     const matchesType = filterType === 'all' || issue.asset?.name_of_supply?.toLowerCase().includes(filterType.toLowerCase());
@@ -144,7 +147,7 @@ const fetchIssues = async (): Promise<AssetIssue[]> => {
     const to = new Date(toDate);
     const matchesDate = (!fromDate || issueDate >= from) && (!toDate || issueDate <= to);
 
-    return matchesStatus && matchesLab && matchesType && matchesDate;
+    return matchesSearch && matchesStatus && matchesLab && matchesType && matchesDate;
   });
 
   if (isLoading) {
@@ -209,6 +212,7 @@ const fetchIssues = async (): Promise<AssetIssue[]> => {
           Analytics
         </button>
       </div>
+
 
       {/* Filters */}
       <div className="bg-white dark:bg-gray-800 rounded-lg shadow-sm border border-gray-200 dark:border-gray-700 p-4 mb-6">

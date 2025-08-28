@@ -6,7 +6,7 @@ import { supabase, AssetTransfer } from '../../lib/supabase';
 import TransferForm from './TransferForm';
 import TransferDetailsModalWithErrorBoundary from './TransferDetailsModalWithErrorBoundary';
 
-const TransferListComponent: React.FC = () => {
+const TransferListComponent: React.FC<{ searchTerm: string }> = ({ searchTerm: propSearchTerm }) => {
   const { profile } = useAuth();
   const [showForm, setShowForm] = useState(false);
   const [viewingTransfer, setViewingTransfer] = useState<AssetTransfer | null>(null);
@@ -66,6 +66,15 @@ const TransferListComponent: React.FC = () => {
            transfer.to_lab === profile?.lab_id;
   }, [profile?.role, profile?.lab_id]);
 
+  const filteredTransfers = transfers.filter(transfer => {
+    const matchesSearch = propSearchTerm === '' || 
+                         transfer.asset?.name_of_supply?.toLowerCase().includes(propSearchTerm.toLowerCase()) ||
+                         (transfer.asset?.sr_no && transfer.asset.sr_no.toString().toLowerCase().includes(propSearchTerm.toLowerCase())) ||
+                         transfer.from_lab?.toLowerCase().includes(propSearchTerm.toLowerCase()) ||
+                         transfer.to_lab?.toLowerCase().includes(propSearchTerm.toLowerCase());
+    return matchesSearch;
+  });
+
   if (isLoading) {
     return (
       <div className="p-4 sm:p-6">
@@ -96,15 +105,16 @@ const TransferListComponent: React.FC = () => {
         )}
       </div>
 
+
       {/* Transfers List */}
       <div className="space-y-4">
-        {transfers.length === 0 ? (
+        {filteredTransfers.length === 0 ? (
           <div className="text-center py-12 bg-white dark:bg-gray-800 rounded-lg shadow-sm border border-gray-200 dark:border-gray-700">
             <ArrowRightLeft className="w-12 h-12 text-gray-300 dark:text-gray-600 mx-auto mb-4" />
             <p className="text-gray-500 dark:text-gray-400">No transfers found</p>
           </div>
         ) : (
-          transfers.map((transfer) => {
+          filteredTransfers.map((transfer) => {
             const StatusIcon = getStatusIcon(transfer.status);
             return (
               <div

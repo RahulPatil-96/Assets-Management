@@ -69,13 +69,13 @@ const MainApp: React.FC = () => {
       case 'issues':
         return (
           <Suspense fallback={<LoadingFallback />}>
-            <IssueList />
+            <IssueList searchTerm={searchTerm} />
           </Suspense>
         );
       case 'transfers':
         return (
           <Suspense fallback={<LoadingFallback />}>
-            <TransferList />
+            <TransferList searchTerm={searchTerm} />
           </Suspense>
         );
       case 'approvals':
@@ -95,7 +95,7 @@ const MainApp: React.FC = () => {
         if (profile.role === 'HOD') {
           return (
             <Suspense fallback={<LoadingFallback />}>
-              <IssueList />
+              <IssueList searchTerm={searchTerm} />
             </Suspense>
           );
         }
