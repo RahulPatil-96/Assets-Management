@@ -5,7 +5,9 @@ import { useAuth } from '../../contexts/AuthContext';
 import { useTheme } from '../../contexts/ThemeContext';
 
 const Navbar: React.FC<{ onSearch: (term: string) => void }> = ({ onSearch }) => {
+  // Extend profile type to accept lab_name
   const { profile, signOut } = useAuth();
+  const profileWithLabName = profile as typeof profile & { lab_name?: string };
   const { theme, toggleTheme } = useTheme();
   const [searchTerm, setSearchTerm] = useState('');
   const [isProfileDropdownOpen, setIsProfileDropdownOpen] = useState(false);
@@ -100,7 +102,7 @@ const Navbar: React.FC<{ onSearch: (term: string) => void }> = ({ onSearch }) =>
                     {profile?.role}
                   </span>
                   <span className='text-xs text-gray-500 dark:text-gray-400 truncate'>
-                    {profile?.lab_id || ''}
+                    {profileWithLabName.lab_name || profileWithLabName.lab_id || ''}
                   </span>
                 </div>
               </div>

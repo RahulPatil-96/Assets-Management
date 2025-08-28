@@ -28,7 +28,7 @@ export interface IssueAnalytics {
 }
 
 export class AnalyticsService {
-  static analyzeAssets(assets: Asset[]): AssetAnalytics {
+  static analyzeAssets(assets: Asset[], labs?: { [id: string]: string }): AssetAnalytics {
     const totalAssets = assets.length;
     const totalQuantity = assets.reduce((sum, asset) => sum + asset.quantity, 0);
     const totalCost = assets.reduce((sum, asset) => sum + asset.quantity * asset.rate, 0);
@@ -42,11 +42,12 @@ export class AnalyticsService {
     const costByType: { [type: string]: number } = {};
 
     assets.forEach(asset => {
-      byLab[asset.allocated_lab] = (byLab[asset.allocated_lab] || 0) + 1;
+      const labName = labs && labs[asset.allocated_lab] ? labs[asset.allocated_lab] : asset.allocated_lab;
+      byLab[labName] = (byLab[labName] || 0) + 1;
       byType[asset.asset_type] = (byType[asset.asset_type] || 0) + 1;
 
       const assetCost = asset.quantity * asset.rate;
-      costByLab[asset.allocated_lab] = (costByLab[asset.allocated_lab] || 0) + assetCost;
+      costByLab[labName] = (costByLab[labName] || 0) + assetCost;
       costByType[asset.asset_type] = (costByType[asset.asset_type] || 0) + assetCost;
     });
 
@@ -63,7 +64,7 @@ export class AnalyticsService {
     };
   }
 
-  static analyzeIssues(issues: AssetIssue[]): IssueAnalytics {
+  static analyzeIssues(issues: AssetIssue[], labs?: { [id: string]: string }): IssueAnalytics {
     const totalIssues = issues.length;
     const openIssues = issues.filter(issue => issue.status === 'open').length;
     const resolvedIssues = totalIssues - openIssues;
@@ -76,8 +77,9 @@ export class AnalyticsService {
     };
 
     issues.forEach(issue => {
-      const lab = issue.asset?.allocated_lab || 'Unknown';
-      issuesByLab[lab] = (issuesByLab[lab] || 0) + 1;
+      const labId = issue.asset?.allocated_lab || 'Unknown';
+      const labName = labs && labs[labId] ? labs[labId] : labId;
+      issuesByLab[labName] = (issuesByLab[labName] || 0) + 1;
     });
 
     // Calculate cost analysis (simplified - you might want more sophisticated logic)

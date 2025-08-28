@@ -22,7 +22,7 @@ CREATE TABLE user_profiles (
   email text NOT NULL UNIQUE,
   role user_role NOT NULL,
   name text NOT NULL,
-  lab_id text NOT NULL,
+  lab_id text,
   created_at timestamptz DEFAULT now(),
   updated_at timestamptz DEFAULT now()
 );
@@ -302,6 +302,7 @@ END;
 $$ LANGUAGE plpgsql SECURITY DEFINER;
 
 -- Grant execute permissions
+GRANT SELECT ON labs TO anon;
 GRANT EXECUTE ON FUNCTION create_user_profile(uuid, text, text, text, text) TO authenticated, anon;
 
 -- Function to create notifications
@@ -809,8 +810,8 @@ ALTER TABLE notifications ENABLE ROW LEVEL SECURITY;
 ALTER TABLE activity_logs ENABLE ROW LEVEL SECURITY;
 
 -- labs: Allow authenticated users to insert labs
-CREATE POLICY labs_insert_all ON labs
-  FOR ALL USING (true) WITH CHECK (true);
+CREATE POLICY labs_select_all ON labs
+  FOR SELECT USING (true);
 
 -- user_profiles: All authenticated users can see all profiles
 CREATE POLICY user_profiles_select_all ON user_profiles
@@ -868,10 +869,10 @@ INSERT INTO labs (name, description, location, lab_identifier, created_at, updat
 -- Insert sample user profiles
 INSERT INTO user_profiles (auth_id, email, role, name, lab_id) VALUES
 ('734ed3f0-37a9-49d0-8388-ed24536ee246', 'hod@university.edu', 'HOD', 'Dr. John Smith', 'ADMIN'),
-('7c8785c1-8743-4618-86ea-3922554a5b87', 'labassistant@university.edu', 'Lab Assistant', 'Alice Johnson', 'CSLAB01'),
-('3f732856-c91e-442c-8abf-5c529906f9d7', 'labincharge@university.edu', 'Lab Incharge', 'Prof. Robert Williams', 'CSLAB01'),
-('2be9de39-516d-4c50-a7a4-c13c7e2fe6a6', 'labassistant2@university.edu', 'Lab Assistant', 'Bob Davis', 'MELAB01'),
-('61592b47-e1c0-49ce-a5e5-0fc7d7eed86a', 'labincharge2@university.edu', 'Lab Incharge', 'Dr. Sarah Miller', 'MELAB01');
+('7c8785c1-8743-4618-86ea-3922554a5b87', 'labassistant@university.edu', 'Lab Assistant', 'Alice Johnson', 'Computer Science Lab 01'),
+('3f732856-c91e-442c-8abf-5c529906f9d7', 'labincharge@university.edu', 'Lab Incharge', 'Prof. Robert Williams', 'Computer Science Lab 01'),
+('2be9de39-516d-4c50-a7a4-c13c7e2fe6a6', 'labassistant2@university.edu', 'Lab Assistant', 'Bob Davis', 'Mechanical Engineering Lab'),
+('61592b47-e1c0-49ce-a5e5-0fc7d7eed86a', 'labincharge2@university.edu', 'Lab Incharge', 'Dr. Sarah Miller', 'Mechanical Engineering Lab');
 
 -- Update labs with incharge information
 -- Removed lab incharge updates as incharge_id column no longer exists

@@ -33,28 +33,29 @@ const AssetForm: React.FC<AssetFormProps> = ({ asset, onClose, onSave }) => {
       if (profile?.lab_id) {
   // fetchingLab removed
         try {
-          const lab = await LabService.getLabByIdentifier(profile.lab_id);
-          setFormData(prev => ({
-            ...prev,
-            allocated_lab: lab?.id || '',
-          }));
-        } catch (error) {
-          console.error('Error fetching lab:', error);
-          // If we can't find the lab by identifier, try to get the first available lab
-          try {
-            const labs = await LabService.getLabs();
-            if (labs.length > 0) {
-              setFormData(prev => ({
-                ...prev,
-                allocated_lab: labs[0].id,
-              }));
+            const lab = await LabService.getLabByIdentifier(profile.lab_id);
+            setFormData(prev => ({
+              ...prev,
+              allocated_lab: lab?.id || '',
+            }));
+          } catch (error: any) {
+            // Only log unexpected errors, not 'no rows' error
+            if (error.code !== 'PGRST116') {
+              console.error('Error fetching lab:', error);
             }
-          } catch (fallbackError) {
-            console.error('Error fetching fallback labs:', fallbackError);
+            // If we can't find the lab by identifier, try to get the first available lab
+            try {
+              const labs = await LabService.getLabs();
+              if (labs.length > 0) {
+                setFormData(prev => ({
+                  ...prev,
+                  allocated_lab: labs[0].id,
+                }));
+              }
+            } catch (fallbackError) {
+              console.error('Error fetching fallback labs:', fallbackError);
+            }
           }
-        } finally {
-          // fetchingLab removed
-        }
       }
     };
 
@@ -324,23 +325,6 @@ const AssetForm: React.FC<AssetFormProps> = ({ asset, onClose, onSave }) => {
             <p className='text-sm text-blue-700 dark:text-blue-300'>
               <strong>Total Amount:</strong> ₹{(formData.quantity * formData.rate).toFixed(2)}
             </p>
-            {!asset && formData.allocated_lab && formData.asset_type && (
-              <p className='text-sm text-blue-700 dark:text-blue-300 mt-2'>
-                <strong>Auto-generated Asset ID:</strong> RSCOE/CSBS/[LAB_IDENTIFIER]/{
-                  formData.asset_type === 'cpu' ? 'PC' :
-                  formData.asset_type === 'printer' ? 'PR' :
-                  formData.asset_type === 'network' ? 'NW' :
-                  formData.asset_type === 'peripheral' ? 'PE' :
-                  formData.asset_type === 'microcontroller' ? 'MC' :
-                  formData.asset_type === 'monitor' ? 'MO' :
-                  formData.asset_type === 'mouse' ? 'MS' :
-                  formData.asset_type === 'keyboard' ? 'KB' :
-                  formData.asset_type === 'scanner' ? 'SC' :
-                  formData.asset_type === 'projector' ? 'PJ' :
-                  formData.asset_type === 'laptop' ? 'LP' : 'OT'
-                }-[NUMBER]
-              </p>
-            )}
           </div>
 
           <div className='flex justify-end space-x-3 pt-4'>
