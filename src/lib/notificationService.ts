@@ -98,7 +98,7 @@ export class NotificationService {
             const { data: actorData } = await supabase
               .from('user_profiles')
               .select('name')
-              .eq('id', notification.actor_id)
+              .eq('auth_id', notification.actor_id)
               .single();
 
             return {

@@ -1,5 +1,5 @@
 import React, { useState, useRef, useEffect, useMemo } from 'react';
-import { Bell, Clock, Package, AlertTriangle, User } from 'lucide-react';
+import { Bell, Clock, Package, AlertTriangle, User, ChevronDown } from 'lucide-react';
 import { useNotifications } from '../../contexts/NotificationContext';
 import { NotificationService } from '../../lib/notificationService';
 
@@ -10,6 +10,7 @@ const NotificationBell: React.FC = () => {
   const [showAll, setShowAll] = useState(false);
   const [filterType, setFilterType] = useState<string>('all');
   const [sortOrder, setSortOrder] = useState<'newest' | 'oldest'>('newest');
+  const [expandedNotificationIds, setExpandedNotificationIds] = useState<Set<string>>(new Set());
   const dropdownRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
@@ -17,6 +18,7 @@ const NotificationBell: React.FC = () => {
       if (dropdownRef.current && !dropdownRef.current.contains(event.target as Node)) {
         setIsOpen(false);
         setShowAll(false); // reset when closed
+        setExpandedNotificationIds(new Set()); // collapse all on close
       }
     };
 
@@ -24,6 +26,7 @@ const NotificationBell: React.FC = () => {
       if (event.key === 'Escape' && isOpen) {
         setIsOpen(false);
         setShowAll(false);
+        setExpandedNotificationIds(new Set()); // collapse all on close
       }
     };
 
@@ -50,6 +53,20 @@ const NotificationBell: React.FC = () => {
         return <Bell {...iconProps} />;
     }
   };
+
+  const toggleExpandNotification = (id: string) => {
+    setExpandedNotificationIds(prev => {
+      const newSet = new Set(prev);
+      if (newSet.has(id)) {
+        newSet.delete(id);
+      } else {
+        newSet.add(id);
+      }
+      return newSet;
+    });
+  };
+
+  const isNotificationExpanded = (id: string) => expandedNotificationIds.has(id);
 
   const getActionColor = (action: string, entityType?: string) => {
     // Base colors for action types
@@ -125,9 +142,10 @@ const NotificationBell: React.FC = () => {
   const groupedNotifications = NotificationService.groupNotificationsByDate(displayedNotifications);
 
   const handleNotificationClick = (id: string) => {
+    // Toggle expansion instead of closing dropdown
+    toggleExpandNotification(id);
+    // Mark as read when expanded
     markAsRead(id);
-    setIsOpen(false);
-    setShowAll(false);
   };
 
   return (
@@ -215,7 +233,7 @@ const NotificationBell: React.FC = () => {
                       }}
                       tabIndex={0}
                       role='button'
-                      aria-label={`Notification: ${notification.message}. Click to mark as read.`}
+                      aria-label={`Notification: ${notification.message}. Click to expand details.`}
                     >
                       <div className='flex items-start space-x-2 sm:space-x-3'>
                         <div
@@ -227,13 +245,49 @@ const NotificationBell: React.FC = () => {
                           {getNotificationIcon(notification.entity_type)}
                         </div>
                         <div className='flex-1 min-w-0'>
-                          <p className='text-xs sm:text-sm text-gray-900 dark:text-white leading-tight'>
-                            {notification.message}
-                          </p>
+                          <div className='flex items-start justify-between'>
+                            <p className='text-xs sm:text-sm text-gray-900 dark:text-white leading-tight'>
+                              {notification.message}
+                            </p>
+                            <ChevronDown 
+                              className={`w-3 h-3 text-gray-400 transition-transform duration-200 ${
+                                isNotificationExpanded(notification.id) ? 'transform rotate-180' : ''
+                              }`}
+                            />
+                          </div>
                           <div className='flex items-center mt-1 text-xs text-gray-500 dark:text-gray-400'>
                             <Clock className='w-3 h-3 mr-1' />
                             {NotificationService.formatRelativeTime(notification.created_at)}
                           </div>
+                          {isNotificationExpanded(notification.id) && (
+                            <div className='mt-2 p-3 bg-gray-50 dark:bg-gray-700 rounded-md text-xs text-gray-700 dark:text-gray-300 space-y-2'>
+                              <div className='flex items-center'>
+                                <User className='w-3 h-3 mr-2 text-gray-500' />
+                                <span><strong>Performed by:</strong> {notification.actor_name || 'System'}</span>
+                              </div>
+                              <div className='flex items-center'>
+                                <Clock className='w-3 h-3 mr-2 text-gray-500' />
+                                <span><strong>Time:</strong> {new Date(notification.created_at).toLocaleString('en-US', {
+                                  year: 'numeric',
+                                  month: 'short',
+                                  day: 'numeric',
+                                  hour: '2-digit',
+                                  minute: '2-digit'
+                                })}</span>
+                              </div>
+                              <div className='flex items-center'>
+                                <Bell className='w-3 h-3 mr-2 text-gray-500' />
+                                <span><strong>Action:</strong> {
+                                  notification.entity_type === notification.action_type 
+                                    ? `${notification.action_type}`
+                                    : `${notification.action_type} on ${notification.entity_type}`
+                                }</span>
+                                {notification.entity_name && (
+                                  <span>: {notification.entity_name}</span>
+                                )}
+                              </div>
+                            </div>
+                          )}
                         </div>
                         {!notification.is_read && (
                           <div className='w-2 h-2 bg-blue-600 dark:bg-blue-400 rounded-full mt-1 sm:mt-2'></div>
