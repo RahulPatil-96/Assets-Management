@@ -168,7 +168,7 @@ CREATE INDEX idx_activity_logs_severity ON activity_logs(severity_level);
 -- FUNCTIONS & TRIGGERS
 
 -- Function to update asset_ids when a lab's identifier changes
-CREATE OR REPLACE FUNCTION update_asset_ids_for_lab(lab_id text, new_lab_identifier text)
+CREATE OR REPLACE FUNCTION update_asset_ids_for_lab(lab_id uuid, new_lab_identifier text)
 RETURNS void AS $$
 DECLARE
   asset_row RECORD;
@@ -211,6 +211,17 @@ BEGIN
     END CASE;
     
     RETURN 'RSCOE/CSBS/' || lab_identifier || '/' || asset_type_prefix || '-' || asset_number;
+END;
+$$ LANGUAGE plpgsql;
+
+-- Trigger to update asset IDs when lab identifier changes
+CREATE OR REPLACE FUNCTION trg_update_asset_ids_on_lab_change() RETURNS TRIGGER AS $$
+BEGIN
+  -- If lab_identifier has changed, update all asset IDs for this lab
+  IF OLD.lab_identifier IS DISTINCT FROM NEW.lab_identifier THEN
+    PERFORM update_asset_ids_for_lab(NEW.id, NEW.lab_identifier);
+  END IF;
+  RETURN NEW;
 END;
 $$ LANGUAGE plpgsql;
 
@@ -772,6 +783,10 @@ CREATE TRIGGER trg_assets_set_asset_id
   BEFORE INSERT ON assets
   FOR EACH ROW EXECUTE FUNCTION set_asset_id();
 
+CREATE TRIGGER trg_update_asset_ids_on_lab_change
+  AFTER UPDATE OF lab_identifier ON labs
+  FOR EACH ROW EXECUTE FUNCTION trg_update_asset_ids_on_lab_change();
+
 CREATE TRIGGER trg_user_profiles_audit 
   AFTER INSERT OR UPDATE OR DELETE ON user_profiles
   FOR EACH ROW EXECUTE FUNCTION trg_user_profiles_audit();
@@ -809,9 +824,21 @@ ALTER TABLE asset_transfers ENABLE ROW LEVEL SECURITY;
 ALTER TABLE notifications ENABLE ROW LEVEL SECURITY;
 ALTER TABLE activity_logs ENABLE ROW LEVEL SECURITY;
 
--- labs: Allow authenticated users to insert labs
+-- labs: Allow authenticated users to select all labs
 CREATE POLICY labs_select_all ON labs
   FOR SELECT USING (true);
+
+-- labs: Allow authenticated users to create labs
+CREATE POLICY labs_insert_all ON labs
+  FOR INSERT WITH CHECK (true);
+
+-- labs: Allow authenticated users to update labs
+CREATE POLICY labs_update_all ON labs
+  FOR UPDATE USING (true) WITH CHECK (true);
+
+-- labs: Allow authenticated users to delete labs
+CREATE POLICY labs_delete_all ON labs
+  FOR DELETE USING (true);
 
 -- user_profiles: All authenticated users can see all profiles
 CREATE POLICY user_profiles_select_all ON user_profiles

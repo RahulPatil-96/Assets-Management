@@ -8,24 +8,31 @@ const LabTable: React.FC = () => {
   const [loading, setLoading] = useState<boolean>(true);
   const [error, setError] = useState<string | null>(null);
   const [showCreateForm, setShowCreateForm] = useState<boolean>(false);
-  const [editingLab, setEditingLab] = useState<Lab | null>(null);
-const [newLab, setNewLab] = useState<CreateLabRequest>({
+  const [editingLabId, setEditingLabId] = useState<string | null>(null);
+  const [newLab, setNewLab] = useState<CreateLabRequest>({
     name: '',
     description: '',
     location: '',
     lab_identifier: '', // Add lab_identifier field
   });
+  const [editLab, setEditLab] = useState<UpdateLabRequest>({
+    name: '',
+    description: '',
+    location: '',
+    lab_identifier: '',
+  });
 
-const { profile } = useAuth(); // Get the user profile from AuthContext
+  const { profile } = useAuth(); // Get the user profile from AuthContext
 
-const fetchLabs = async () => {
+  const fetchLabs = async () => {
     try {
       const fetchedLabs = await LabService.getLabs(); // Fetch all labs
       console.log('Fetched labs:', fetchedLabs); // Log the fetched labs
       setLabs(fetchedLabs);
-    } catch (_err) {
-      console.error('Error fetching labs:', _err); // Log the error
-      setError('Failed to fetch labs');
+    } catch (err) {
+      console.error('Error fetching labs:', err); // Log the error
+      const errorMessage = err instanceof Error ? err.message : 'Unknown error';
+      setError(`Failed to fetch labs: ${errorMessage}`);
     } finally {
       setLoading(false);
     }
@@ -52,40 +59,68 @@ const fetchLabs = async () => {
       setShowCreateForm(false);
       setNewLab({ name: '', description: '', location: '', lab_identifier: '' });
       fetchLabs(); // Refresh the list
-    } catch (_err) {
-      console.error('Error creating lab:', _err); // Log the error
-      setError('Failed to create lab');
-    }
-  };
-
-  const handleEditLab = async (lab: Lab) => {
-    setEditingLab(lab);
-  };
-
-  const handleUpdateLab = async () => {
-    if (!editingLab) return;
-    try {
-      const updates: UpdateLabRequest = {
-        name: editingLab.name,
-        description: editingLab.description,
-        location: editingLab.location,
-        lab_identifier: editingLab.lab_identifier,
-      };
-      await LabService.updateLab(editingLab.id, updates);
-      setEditingLab(null);
-      fetchLabs(); // Refresh the list
-    } catch (_err) {
-      setError('Failed to update lab');
+    } catch (err) {
+      console.error('Error creating lab:', err); // Log the error
+      const errorMessage = err instanceof Error ? err.message : 'Unknown error';
+      setError(`Failed to create lab: ${errorMessage}`);
     }
   };
 
   const handleDeleteLab = async (labId: string) => {
     try {
+      console.log('Attempting to delete lab with ID:', labId);
       await LabService.deleteLab(labId);
+      console.log('Lab deleted successfully');
       fetchLabs(); // Refresh the list
-    } catch (_err) {
-      setError('Failed to delete lab');
+    } catch (err) {
+      console.error('Error deleting lab:', err); // Log the error
+      const errorMessage = err instanceof Error ? err.message : 'Unknown error';
+      setError(`Failed to delete lab: ${errorMessage}`);
     }
+  };
+
+  const handleUpdateLab = async () => {
+    if (!profile) {
+      setError('User profile not found');
+      return;
+    }
+    
+    // Only HOD can update labs
+    if (profile.role !== 'HOD') {
+      setError('Only HOD can update labs');
+      return;
+    }
+    
+    if (!editingLabId) {
+      setError('No lab selected for editing');
+      return;
+    }
+    
+    try {
+      await LabService.updateLab(editingLabId, editLab);
+      setEditingLabId(null);
+      setEditLab({ name: '', description: '', location: '', lab_identifier: '' });
+      fetchLabs(); // Refresh the list
+    } catch (err) {
+      console.error('Error updating lab:', err); // Log the error
+      const errorMessage = err instanceof Error ? err.message : 'Unknown error';
+      setError(`Failed to update lab: ${errorMessage}`);
+    }
+  };
+
+  const startEditingLab = (lab: Lab) => {
+    setEditingLabId(lab.id);
+    setEditLab({
+      name: lab.name,
+      description: lab.description || '',
+      location: lab.location || '',
+      lab_identifier: lab.lab_identifier || '',
+    });
+  };
+
+  const cancelEdit = () => {
+    setEditingLabId(null);
+    setEditLab({ name: '', description: '', location: '', lab_identifier: '' });
   };
 
   if (loading) {
@@ -158,43 +193,45 @@ const fetchLabs = async () => {
       <div className='space-y-3'>
         {labs.map(lab => (
           <div key={lab.id} className='border border-gray-200 dark:border-gray-600 rounded p-4'>
-            {editingLab?.id === lab.id ? (
-              <div>
+            {editingLabId === lab.id ? (
+              <div className='mb-4 p-4 border rounded bg-gray-50'>
+                <h3 className='text-lg font-semibold mb-2'>Edit Lab</h3>
                 <input
                   type='text'
-                  value={editingLab.name}
-                  onChange={e => setEditingLab({ ...editingLab, name: e.target.value })}
+                  placeholder='Lab Name'
+                  value={editLab.name}
+                  onChange={e => setEditLab({ ...editLab, name: e.target.value })}
                   className='border p-2 rounded mb-2 w-full'
                 />
                 <input
                   type='text'
-                  value={editingLab.description}
-                  onChange={e => setEditingLab({ ...editingLab, description: e.target.value })}
+                  placeholder='Description'
+                  value={editLab.description}
+                  onChange={e => setEditLab({ ...editLab, description: e.target.value })}
                   className='border p-2 rounded mb-2 w-full'
                 />
                 <input
                   type='text'
-                  value={editingLab.location}
-                  onChange={e => setEditingLab({ ...editingLab, location: e.target.value })}
+                  placeholder='Location'
+                  value={editLab.location}
+                  onChange={e => setEditLab({ ...editLab, location: e.target.value })}
                   className='border p-2 rounded mb-2 w-full'
                 />
                 <input
                   type='text'
-                  value={editingLab.lab_identifier}
-                  onChange={e => setEditingLab({ ...editingLab, lab_identifier: e.target.value })}
-                  className='border p-2 rounded mb-2 w-full'
+                  placeholder='Lab Identifier'
+                  value={editLab.lab_identifier}
+                  onChange={e => setEditLab({ ...editLab, lab_identifier: e.target.value })}
+                  className='border p-2 rounded mb-2 w-full bg-gray-100 cursor-not-allowed'
+                  disabled
                 />
-                {/* Removed Incharge ID input field */}
                 <div className='flex space-x-2'>
-                  <button
-                    onClick={handleUpdateLab}
-                    className='bg-green-500 text-white px-3 py-1 rounded'
-                  >
-                    Save
+                  <button onClick={handleUpdateLab} className='bg-green-500 text-white px-4 py-2 rounded'>
+                    Update
                   </button>
                   <button
-                    onClick={() => setEditingLab(null)}
-                    className='bg-gray-500 text-white px-3 py-1 rounded'
+                    onClick={cancelEdit}
+                    className='bg-gray-500 text-white px-4 py-2 rounded'
                   >
                     Cancel
                   </button>
@@ -207,20 +244,22 @@ const fetchLabs = async () => {
                 <p className='text-sm text-gray-500'>Location: {lab.location}</p>
                 <p className='text-sm text-gray-500'>Identifier: {lab.lab_identifier}</p>
                 {/* Removed Incharge display */}
-                <div className='flex space-x-2 mt-2'>
-                  <button
-                    onClick={() => handleEditLab(lab)}
-                    className='bg-yellow-500 text-white px-3 py-1 rounded'
-                  >
-                    Edit
-                  </button>
-                  <button
-                    onClick={() => handleDeleteLab(lab.id)}
-                    className='bg-red-500 text-white px-3 py-1 rounded'
-                  >
-                    Delete
-                  </button>
-                </div>
+                {profile?.role === 'HOD' && (
+                  <div className='flex space-x-2 mt-2'>
+                    <button
+                      onClick={() => startEditingLab(lab)}
+                      className='bg-yellow-500 text-white px-3 py-1 rounded'
+                    >
+                      Edit
+                    </button>
+                    <button
+                      onClick={() => handleDeleteLab(lab.id)}
+                      className='bg-red-500 text-white px-3 py-1 rounded'
+                    >
+                      Delete
+                    </button>
+                  </div>
+                )}
               </div>
             )}
           </div>

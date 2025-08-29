@@ -4,6 +4,12 @@ import { useAuth } from '../../contexts/AuthContext';
 import { supabase, Asset } from '../../lib/supabase';
 import { LabService } from '../../lib/labService';
 
+// UUID validation function
+const isValidUUID = (uuid: string): boolean => {
+  const uuidRegex = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
+  return uuidRegex.test(uuid);
+};
+
 interface TransferFormProps {
   onClose: () => void;
   onSave: () => void;
@@ -64,6 +70,19 @@ const TransferForm: React.FC<TransferFormProps> = ({ onClose, onSave }) => {
       setLoading(true);
 
       try {
+        // Validate UUIDs before proceeding
+        if (!isValidUUID(formData.to_lab)) {
+          throw new Error('Invalid destination lab ID format');
+        }
+        
+        if (!isValidUUID(formData.asset_id)) {
+          throw new Error('Invalid asset ID format');
+        }
+
+        if (profile?.lab_id && !isValidUUID(profile.lab_id)) {
+          throw new Error('Invalid source lab ID format');
+        }
+
         const { error } = await supabase.from('asset_transfers').insert({
           ...formData,
           from_lab: profile?.lab_id,
@@ -82,9 +101,9 @@ const TransferForm: React.FC<TransferFormProps> = ({ onClose, onSave }) => {
 
         onSave();
         onClose();
-      } catch (_error) {
-        // console.error('Error initiating transfer:', _error);
-        alert('Error initiating transfer. Please try again.');
+      } catch (error) {
+        console.error('Error initiating transfer:', error);
+        alert(`Error initiating transfer: ${error instanceof Error ? error.message : 'Unknown error'}`);
       } finally {
         setLoading(false);
       }
