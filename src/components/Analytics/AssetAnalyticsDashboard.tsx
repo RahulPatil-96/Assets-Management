@@ -6,10 +6,11 @@ import ChartCard from './ChartCard';
 
 interface AssetAnalyticsDashboardProps {
   assets: Asset[];
+  labs?: { [id: string]: string };
 }
 
-const AssetAnalyticsDashboard: React.FC<AssetAnalyticsDashboardProps> = ({ assets }) => {
-  const analytics = AnalyticsService.analyzeAssets(assets);
+const AssetAnalyticsDashboard: React.FC<AssetAnalyticsDashboardProps> = ({ assets, labs }) => {
+  const analytics = AnalyticsService.analyzeAssets(assets, labs);
   const chartsData = AnalyticsService.generateAssetChartsData(analytics);
 
   const statCards = [

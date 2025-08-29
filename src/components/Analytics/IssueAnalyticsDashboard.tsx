@@ -6,10 +6,11 @@ import ChartCard from './ChartCard';
 
 interface IssueAnalyticsDashboardProps {
   issues: AssetIssue[];
+  labs?: { [id: string]: string };
 }
 
-const IssueAnalyticsDashboard: React.FC<IssueAnalyticsDashboardProps> = ({ issues }) => {
-  const analytics = AnalyticsService.analyzeIssues(issues);
+const IssueAnalyticsDashboard: React.FC<IssueAnalyticsDashboardProps> = ({ issues, labs }) => {
+  const analytics = AnalyticsService.analyzeIssues(issues, labs);
   const chartsData = AnalyticsService.generateIssueChartsData(analytics);
 
   const statCards = [
@@ -109,24 +110,10 @@ const IssueAnalyticsDashboard: React.FC<IssueAnalyticsDashboardProps> = ({ issue
             <div className='space-y-2'>
               <div className='flex justify-between items-center'>
                 <span className='text-sm text-gray-600 dark:text-gray-400'>
-                  Estimated Repair Cost
+                  Total Repair Cost
                 </span>
                 <span className='font-medium text-gray-900 dark:text-gray-100'>
-                  ₹{analytics.costAnalysis.estimatedRepairCost.toLocaleString()}
-                </span>
-              </div>
-              <div className='flex justify-between items-center'>
-                <span className='text-sm text-gray-600 dark:text-gray-400'>Replacement Cost</span>
-                <span className='font-medium text-gray-900 dark:text-gray-100'>
-                  ₹{analytics.costAnalysis.replacementCost.toLocaleString()}
-                </span>
-              </div>
-              <div className='flex justify-between items-center'>
-                <span className='text-sm text-gray-600 dark:text-gray-400'>
-                  Total Potential Cost
-                </span>
-                <span className='font-medium text-gray-900 dark:text-gray-100'>
-                  ₹{analytics.costAnalysis.totalPotentialCost.toLocaleString()}
+                  ₹{analytics.costAnalysis.totalRepairCost.toLocaleString()}
                 </span>
               </div>
             </div>

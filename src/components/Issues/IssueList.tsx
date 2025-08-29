@@ -21,6 +21,7 @@ const IssueListComponent: React.FC<{ searchTerm: string }> = ({ searchTerm: prop
   const [resolvingIssue, setResolvingIssue] = useState<AssetIssue | null>(null);
   const [remark, setRemark] = useState<string>('');
   const [costRequired, setCostRequired] = useState<string>('');
+  const [labMap, setLabMap] = useState<Map<string, string>>(new Map());
 
   type AssetIssueWithLabName = AssetIssue & { lab_name?: string };
   const fetchIssues = async (): Promise<AssetIssueWithLabName[]> => {
@@ -38,14 +39,15 @@ const IssueListComponent: React.FC<{ searchTerm: string }> = ({ searchTerm: prop
     if (issuesError) throw issuesError;
     if (labsError) throw labsError;
     // Map lab id to name
-    const labMap = new Map<string, string>();
+    const newLabMap = new Map<string, string>();
     (labsData || []).forEach((lab: { id: string; name: string }) => {
-      labMap.set(lab.id, lab.name);
+      newLabMap.set(lab.id, lab.name);
     });
+    setLabMap(newLabMap);
     // Attach lab name to each issue
     return (issuesData || []).map((issue: any) => ({
       ...issue,
-      lab_name: issue.asset ? labMap.get(issue.asset.allocated_lab) || issue.asset.allocated_lab : undefined,
+      lab_name: issue.asset ? newLabMap.get(issue.asset.allocated_lab) || issue.asset.allocated_lab : undefined,
     }));
   };
 
@@ -388,7 +390,7 @@ const IssueListComponent: React.FC<{ searchTerm: string }> = ({ searchTerm: prop
           </div>
         </>
       ) : (
-        <IssueAnalyticsDashboard issues={filteredIssues} />
+        <IssueAnalyticsDashboard issues={filteredIssues} labs={Object.fromEntries(labMap)} />
       )}
 
       {/* Issue Form Modal */}

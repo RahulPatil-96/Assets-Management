@@ -19,6 +19,7 @@ const AssetList: React.FC<{ searchTerm: string }> = ({ searchTerm }) => {
   const [editingAsset, setEditingAsset] = useState<Asset | null>(null);
   const [viewingAsset, setViewingAsset] = useState<Asset | null>(null);
   const [activeTab, setActiveTab] = useState<'list' | 'analytics'>('list');
+  const [labMap, setLabMap] = useState<Map<string, string>>(new Map());
 
   type AssetWithLabName = Asset & { lab_name: string };
   const fetchAssets = async (): Promise<AssetWithLabName[]> => {
@@ -36,14 +37,15 @@ const AssetList: React.FC<{ searchTerm: string }> = ({ searchTerm }) => {
     if (assetsError) throw assetsError;
     if (labsError) throw labsError;
     // Map lab id to name
-    const labMap = new Map<string, string>();
+    const newLabMap = new Map<string, string>();
     (labsData || []).forEach((lab: { id: string; name: string }) => {
-      labMap.set(lab.id, lab.name);
+      newLabMap.set(lab.id, lab.name);
     });
+    setLabMap(newLabMap);
     // Attach lab name to each asset
     return (assetsData || []).map((asset: any) => ({
       ...asset,
-      lab_name: labMap.get(asset.allocated_lab) || asset.allocated_lab,
+      lab_name: newLabMap.get(asset.allocated_lab) || asset.allocated_lab,
     }));
   };
 
@@ -416,7 +418,7 @@ const AssetList: React.FC<{ searchTerm: string }> = ({ searchTerm }) => {
                                 }}
                                 className='text-blue-600 dark:text-blue-400 hover:text-blue-800 dark:hover:text-blue-300'
                                 title='Edit Asset'
-                              >
+                            >
                                 <Edit className='w-5 h-5' />
                               </button>
                             )}
@@ -449,7 +451,7 @@ const AssetList: React.FC<{ searchTerm: string }> = ({ searchTerm }) => {
           </div>
         </>
       ) : (
-        <AssetAnalyticsDashboard assets={filteredAssets} />
+        <AssetAnalyticsDashboard assets={filteredAssets} labs={Object.fromEntries(labMap)} />
       )}
 
       {/* Asset Form Modal */}

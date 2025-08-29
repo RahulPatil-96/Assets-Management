@@ -78,7 +78,8 @@ export class PDFExportService {
   static async exportAssetsToPDF(
     assets: Asset[],
     analytics: AssetAnalytics,
-    fileName = 'assets-report.pdf'
+    fileName = 'assets-report.pdf',
+    labs: { [id: string]: string } = {}
   ) {
     const doc = this.getDoc();
     const pageNum = 1;
@@ -119,7 +120,7 @@ export class PDFExportService {
         asset.asset_id || 'Pending...',
         asset.name_of_supply,
         asset.asset_type,
-        asset.allocated_lab,
+        labs[asset.allocated_lab] || asset.allocated_lab,
         asset.quantity.toString(),
         `Rs.${asset.rate.toLocaleString()}`,
         `Rs.${(asset.quantity * asset.rate).toLocaleString()}`,
@@ -155,7 +156,7 @@ export class PDFExportService {
     yPos += 7;
     for (const [lab, count] of Object.entries(analytics.byLab)) {
       yPos = handlePageBreak(doc, yPos);
-      doc.text(`  ${lab}: ${count} assets`, 25, yPos);
+      doc.text(`  ${labs[lab] || lab}: ${count} assets`, 25, yPos);
       yPos += 6;
     }
 
@@ -165,9 +166,39 @@ export class PDFExportService {
     yPos += 7;
     for (const [lab, cost] of Object.entries(analytics.costByLab)) {
       yPos = handlePageBreak(doc, yPos);
-      doc.text(`  ${lab}: Rs.${cost.toLocaleString()}`, 25, yPos);
+      doc.text(`  ${labs[lab] || lab}: Rs.${cost.toLocaleString()}`, 25, yPos);
       yPos += 6;
     }
+
+    yPos += 5;
+    yPos = handlePageBreak(doc, yPos);
+    
+    // Distribution by Type
+    doc.text('Distribution by Type:', 20, yPos);
+    yPos += 7;
+    for (const [type, count] of Object.entries(analytics.byType)) {
+      yPos = handlePageBreak(doc, yPos);
+      doc.text(`  ${type}: ${count} assets`, 25, yPos);
+      yPos += 6;
+    }
+
+    yPos += 5;
+    yPos = handlePageBreak(doc, yPos);
+    
+    // Cost Analysis Table
+    doc.text('Cost Analysis:', 20, yPos);
+    yPos += 7;
+    
+    const costData: [string, number][] = [
+      ['Total Cost', analytics.totalCost],
+      ['Average Cost per Asset', analytics.totalCost / analytics.totalAssets],
+    ];
+
+    costData.forEach(([label, value]) => {
+      yPos = handlePageBreak(doc, yPos);
+      doc.text(`  ${label}: Rs.${value.toLocaleString()}`, 25, yPos);
+      yPos += 6;
+    });
 
     addFooter(doc, pageNum);
     doc.save(fileName);
@@ -176,7 +207,8 @@ export class PDFExportService {
   static async exportIssuesToPDF(
     issues: AssetIssue[],
     analytics: IssueAnalytics,
-    fileName = 'issues-report.pdf'
+    fileName = 'issues-report.pdf',
+    labs: { [id: string]: string } = {}
   ) {
     const doc = this.getDoc();
     const pageNum = 1;
@@ -220,7 +252,7 @@ export class PDFExportService {
 
     const issuesData: RowInput[] = issues.map(issue => [
       issue.asset?.name_of_supply || 'Unknown',
-      issue.asset?.allocated_lab || 'Unknown',
+      issue.asset?.allocated_lab ? (labs[issue.asset.allocated_lab] || issue.asset.allocated_lab) : 'Unknown',
       issue.issue_description.length > 50
         ? `${issue.issue_description.substring(0, 50)}...`
         : issue.issue_description,
@@ -253,9 +285,28 @@ export class PDFExportService {
 
     for (const [lab, count] of Object.entries(analytics.issuesByLab)) {
       yPos = handlePageBreak(doc, yPos);
-      doc.text(`  ${lab}: ${count} issues`, 25, yPos);
+      doc.text(`  ${labs[lab] || lab}: ${count} issues`, 25, yPos);
       yPos += 6;
     }
+
+    yPos += 5;
+    yPos = handlePageBreak(doc, yPos);
+    
+    // Cost Analysis
+    doc.text('Cost Analysis:', 20, yPos);
+    yPos += 7;
+    
+    const costData: [string, number][] = [
+      ['Estimated Repair Cost', analytics.costAnalysis.estimatedRepairCost],
+      ['Replacement Cost', analytics.costAnalysis.replacementCost],
+      ['Total Potential Cost', analytics.costAnalysis.totalPotentialCost],
+    ];
+
+    costData.forEach(([label, value]) => {
+      yPos = handlePageBreak(doc, yPos);
+      doc.text(`  ${label}: Rs.${value.toLocaleString()}`, 25, yPos);
+      yPos += 6;
+    });
 
     addFooter(doc, pageNum);
     doc.save(fileName);

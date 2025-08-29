@@ -1,4 +1,4 @@
-import ExcelJS from 'exceljs';
+import * as ExcelJS from 'exceljs';
 import { Asset, AssetIssue } from './supabase';
 import { AssetAnalytics, IssueAnalytics } from './analyticsService';
 
@@ -90,6 +90,41 @@ export class ExcelExportService {
     });
   }
 
+  // Helper: Apply zebra striping to data rows
+  static applyZebraStriping(
+    sheet: ExcelJS.Worksheet,
+    startRow: number,
+    endRow: number,
+    startCol: number,
+    endCol: number
+  ) {
+    for (let row = startRow; row <= endRow; row++) {
+      const isEvenRow = row % 2 === 0;
+      for (let col = startCol; col <= endCol; col++) {
+        const cell = sheet.getCell(row, col);
+        if (isEvenRow) {
+          cell.fill = {
+            type: 'pattern',
+            pattern: 'solid',
+            fgColor: { argb: 'FFF8FAFC' }, // Light gray for even rows
+          };
+        } else {
+          cell.fill = {
+            type: 'pattern',
+            pattern: 'solid',
+            fgColor: { argb: 'FFFFFFFF' }, // White for odd rows
+          };
+        }
+        cell.border = {
+          top: { style: 'thin' },
+          bottom: { style: 'thin' },
+          left: { style: 'thin' },
+          right: { style: 'thin' },
+        };
+      }
+    }
+  }
+
   // Helper: Download workbook with correct filename & single .xlsx extension
   static async downloadWorkbook(workbook: ExcelJS.Workbook, fileName: string) {
     if (!fileName.toLowerCase().endsWith('.xlsx')) {
@@ -111,7 +146,8 @@ export class ExcelExportService {
   static async exportAssetsToExcel(
     assets: Asset[],
     analytics: AssetAnalytics,
-    fileName = 'assets-report.xlsx'
+    fileName = 'assets-report.xlsx',
+    labs: { [id: string]: string } = {}
   ) {
     const workbook = new ExcelJS.Workbook();
 
@@ -147,7 +183,7 @@ export class ExcelExportService {
       const rowNum = 12 + idx;
       sheet.getCell(rowNum, 1).value = asset.name_of_supply;
       sheet.getCell(rowNum, 2).value = asset.asset_type;
-      sheet.getCell(rowNum, 3).value = asset.allocated_lab;
+      sheet.getCell(rowNum, 3).value = labs[asset.allocated_lab] || asset.allocated_lab;
       sheet.getCell(rowNum, 4).value = asset.quantity;
       sheet.getCell(rowNum, 5).value = asset.rate;
       sheet.getCell(rowNum, 5).numFmt = '₹#,##0.00';
@@ -182,25 +218,24 @@ export class ExcelExportService {
     });
 
     // Auto format columns
+    this.applyZebraStriping(sheet, 12, 11 + assets.length, 1, 8);
     this.autoFormatColumns(sheet);
 
-    // --- Analytics Sheet ---
-    const analyticsSheet = workbook.addWorksheet('Analytics');
-
-    this.addTitle(analyticsSheet, 'Asset Analytics', 1, 1, 3);
+    // Add analytics summary and tables below data rows in the same sheet
+    let row = 12 + assets.length + 2;
 
     // Analytics Overview text block
-    analyticsSheet.getCell('A3').value = 'Analytics Overview';
-    analyticsSheet.getCell('A3').font = { size: 14, bold: true };
+    sheet.getCell(`A${row}`).value = 'Analytics Overview';
+    sheet.getCell(`A${row}`).font = { size: 14, bold: true };
+    row++;
 
     // Distribution by Lab text with counts formatted as requested
-    let row = 5;
-    analyticsSheet.getCell(`A${row}`).value = 'Distribution by Lab:';
-    analyticsSheet.getCell(`A${row}`).font = { bold: true };
+    sheet.getCell(`A${row}`).value = 'Distribution by Lab:';
+    sheet.getCell(`A${row}`).font = { bold: true };
     row++;
 
     for (const [lab, count] of Object.entries(analytics.byLab)) {
-      analyticsSheet.getCell(`A${row}`).value = `${lab}: ${count} assets`;
+      sheet.getCell(`A${row}`).value = `${labs[lab] || lab}: ${count} assets`;
       row++;
     }
 
@@ -208,14 +243,13 @@ export class ExcelExportService {
     row++;
 
     // Cost by Lab text with currency formatting like your example
-    analyticsSheet.getCell(`A${row}`).value = 'Cost by Lab:';
-    analyticsSheet.getCell(`A${row}`).font = { bold: true };
+    sheet.getCell(`A${row}`).value = 'Cost by Lab:';
+    sheet.getCell(`A${row}`).font = { bold: true };
     row++;
 
     for (const [lab, cost] of Object.entries(analytics.costByLab)) {
-      // Format cost with "Rs." and commas
       const costFormatted = `Rs.${cost.toLocaleString('en-IN')}`;
-      analyticsSheet.getCell(`A${row}`).value = `${lab}: ${costFormatted}`;
+      sheet.getCell(`A${row}`).value = `${labs[lab] || lab}: ${costFormatted}`;
       row++;
     }
 
@@ -223,62 +257,60 @@ export class ExcelExportService {
     row += 2;
 
     // Detailed Distribution by Lab Table
-    analyticsSheet.getCell(`A${row}`).value = 'Distribution by Lab';
-    analyticsSheet.getCell(`A${row}`).font = { size: 14, bold: true };
+    sheet.getCell(`A${row}`).value = 'Distribution by Lab';
+    sheet.getCell(`A${row}`).font = { size: 14, bold: true };
     row++;
 
-    analyticsSheet.getCell(`A${row}`).value = 'Lab';
-    analyticsSheet.getCell(`B${row}`).value = 'Count';
-    analyticsSheet.getRow(row).font = { bold: true };
-    analyticsSheet.getRow(row).alignment = { horizontal: 'center' };
+    sheet.getCell(`A${row}`).value = 'Lab';
+    sheet.getCell(`B${row}`).value = 'Count';
+    sheet.getRow(row).font = { bold: true };
+    sheet.getRow(row).alignment = { horizontal: 'center' };
     row++;
 
     for (const [lab, count] of Object.entries(analytics.byLab)) {
-      analyticsSheet.getCell(`A${row}`).value = lab;
-      analyticsSheet.getCell(`B${row}`).value = count;
+      sheet.getCell(`A${row}`).value = labs[lab] || lab;
+      sheet.getCell(`B${row}`).value = count;
       row++;
     }
 
     row += 2;
 
     // Cost by Lab Table
-    analyticsSheet.getCell(`A${row}`).value = 'Cost by Lab';
-    analyticsSheet.getCell(`A${row}`).font = { size: 14, bold: true };
+    sheet.getCell(`A${row}`).value = 'Cost by Lab';
+    sheet.getCell(`A${row}`).font = { size: 14, bold: true };
     row++;
 
-    analyticsSheet.getCell(`A${row}`).value = 'Lab';
-    analyticsSheet.getCell(`B${row}`).value = 'Cost';
-    analyticsSheet.getRow(row).font = { bold: true };
-    analyticsSheet.getRow(row).alignment = { horizontal: 'center' };
+    sheet.getCell(`A${row}`).value = 'Lab';
+    sheet.getCell(`B${row}`).value = 'Cost';
+    sheet.getRow(row).font = { bold: true };
+    sheet.getRow(row).alignment = { horizontal: 'center' };
     row++;
 
     for (const [lab, cost] of Object.entries(analytics.costByLab)) {
-      analyticsSheet.getCell(`A${row}`).value = lab;
-      analyticsSheet.getCell(`B${row}`).value = cost;
-      analyticsSheet.getCell(`B${row}`).numFmt = '₹#,##0.00';
+      sheet.getCell(`A${row}`).value = labs[lab] || lab;
+      sheet.getCell(`B${row}`).value = cost;
+      sheet.getCell(`B${row}`).numFmt = '₹#,##0.00';
       row++;
     }
 
-    row += 2;
-
     // Distribution by Type Table
-    analyticsSheet.getCell(`A${row}`).value = 'Distribution by Type';
-    analyticsSheet.getCell(`A${row}`).font = { size: 14, bold: true };
+    sheet.getCell(`A${row}`).value = 'Distribution by Type';
+    sheet.getCell(`A${row}`).font = { size: 14, bold: true };
     row++;
 
-    analyticsSheet.getCell(`A${row}`).value = 'Type';
-    analyticsSheet.getCell(`B${row}`).value = 'Count';
-    analyticsSheet.getRow(row).font = { bold: true };
-    analyticsSheet.getRow(row).alignment = { horizontal: 'center' };
+    sheet.getCell(`A${row}`).value = 'Type';
+    sheet.getCell(`B${row}`).value = 'Count';
+    sheet.getRow(row).font = { bold: true };
+    sheet.getRow(row).alignment = { horizontal: 'center' };
     row++;
 
     for (const [type, count] of Object.entries(analytics.byType)) {
-      analyticsSheet.getCell(`A${row}`).value = type;
-      analyticsSheet.getCell(`B${row}`).value = count;
+      sheet.getCell(`A${row}`).value = type;
+      sheet.getCell(`B${row}`).value = count;
       row++;
     }
 
-    this.autoFormatColumns(analyticsSheet);
+    this.autoFormatColumns(sheet);
 
     // Download the file
     await this.downloadWorkbook(workbook, fileName);
@@ -288,7 +320,8 @@ export class ExcelExportService {
   static async exportIssuesToExcel(
     issues: AssetIssue[],
     analytics: IssueAnalytics,
-    fileName = 'issues-report.xlsx'
+    fileName = 'issues-report.xlsx',
+    labs: { [id: string]: string } = {}
   ) {
     const workbook = new ExcelJS.Workbook();
 
@@ -323,7 +356,7 @@ export class ExcelExportService {
     issues.forEach((issue, idx) => {
       const rowNum = 15 + idx;
       sheet.getCell(rowNum, 1).value = issue.asset?.name_of_supply || 'Unknown';
-      sheet.getCell(rowNum, 2).value = issue.asset?.allocated_lab || 'Unknown';
+      sheet.getCell(rowNum, 2).value = issue.asset?.allocated_lab ? (labs[issue.asset.allocated_lab] || issue.asset.allocated_lab) : 'Unknown';
       sheet.getCell(rowNum, 3).value = issue.issue_description;
 
       // Status with color + icon
@@ -362,26 +395,41 @@ export class ExcelExportService {
       }
     });
 
+    this.applyZebraStriping(sheet, 15, 14 + issues.length, 1, 6);
     this.autoFormatColumns(sheet, 20);
 
-    // --- Analytics Sheet ---
-    const analyticsSheet = workbook.addWorksheet('Analytics');
-    this.addTitle(analyticsSheet, 'Issue Analytics', 1, 1, 3);
+    // Add analytics summary and tables below data rows in the same sheet
+    let row = 15 + issues.length + 2;
 
-    analyticsSheet.getCell('A3').value = 'Issues by Lab';
-    analyticsSheet.getCell('A3').font = { bold: true };
+    // Issues by Lab Table
+    sheet.getCell(`A${row}`).value = 'Issues by Lab';
+    sheet.getCell(`A${row}`).font = { size: 14, bold: true };
+    row++;
 
-    let row = 4;
+    sheet.getCell(`A${row}`).value = 'Lab';
+    sheet.getCell(`B${row}`).value = 'Count';
+    sheet.getRow(row).font = { bold: true };
+    sheet.getRow(row).alignment = { horizontal: 'center' };
+    row++;
+
     Object.entries(analytics.issuesByLab).forEach(([lab, count]) => {
-      analyticsSheet.getCell(`A${row}`).value = lab;
-      analyticsSheet.getCell(`B${row}`).value = count;
+      sheet.getCell(`A${row}`).value = labs[lab] || lab;
+      sheet.getCell(`B${row}`).value = count;
       row++;
     });
 
     row += 2;
 
-    analyticsSheet.getCell('A10').value = 'Cost Analysis';
-    analyticsSheet.getCell('A10').font = { bold: true };
+    // Cost Analysis Table
+    sheet.getCell(`A${row}`).value = 'Cost Analysis';
+    sheet.getCell(`A${row}`).font = { size: 14, bold: true };
+    row++;
+
+    sheet.getCell(`A${row}`).value = 'Category';
+    sheet.getCell(`B${row}`).value = 'Amount';
+    sheet.getRow(row).font = { bold: true };
+    sheet.getRow(row).alignment = { horizontal: 'center' };
+    row++;
 
     const costData: [string, number][] = [
       ['Estimated Repair Cost', analytics.costAnalysis.estimatedRepairCost],
@@ -389,13 +437,14 @@ export class ExcelExportService {
       ['Total Potential Cost', analytics.costAnalysis.totalPotentialCost],
     ];
 
-    costData.forEach(([label, value], i) => {
-      analyticsSheet.getCell(`A${11 + i}`).value = label;
-      analyticsSheet.getCell(`B${11 + i}`).value = value;
-      analyticsSheet.getCell(`B${11 + i}`).numFmt = '₹#,##0.00';
+    costData.forEach(([label, value]) => {
+      sheet.getCell(`A${row}`).value = label;
+      sheet.getCell(`B${row}`).value = value;
+      sheet.getCell(`B${row}`).numFmt = '₹#,##0.00';
+      row++;
     });
 
-    this.autoFormatColumns(analyticsSheet, 20);
+    this.autoFormatColumns(sheet, 20);
 
     // Download file
     await this.downloadWorkbook(workbook, fileName);

@@ -170,23 +170,23 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
           console.log('📋 User metadata:', userMetadata);
 
           try {
-            const { data: _rpcResult, error: _rpcError } = await supabase.rpc(
-              'create_user_profile',
-              {
-                p_auth_id: session.user.id,
-                p_email: session.user.email || '',
-                p_role: userMetadata?.role || 'Lab Assistant',
-                p_name: userMetadata?.name || '',
-                p_lab_id: userMetadata?.lab_id || await (async () => {
-                  try {
-                    const labs = await LabService.getLabs();
-                    return labs.find(lab => lab.name === userMetadata?.labName)?.id || '';
-                  } catch {
-                    return '';
-                  }
-                })(),
-              }
-            );
+              const { data: _rpcResult, error: _rpcError } = await supabase.rpc(
+                'create_user_profile',
+                {
+                  p_auth_id: session.user.id,
+                  p_email: session.user.email || '',
+                  p_role: userMetadata?.role || 'Lab Assistant',
+                  p_name: userMetadata?.name || '',
+                  p_lab_id: userMetadata?.lab_id || userMetadata?.labName || await (async () => {
+                    try {
+                      const labs = await LabService.getLabs();
+                      return labs[0]?.id || '';
+                    } catch {
+                      return '';
+                    }
+                  })(),
+                }
+              );
 
             console.log('📊 RPC call result:', { rpcResult: _rpcResult, rpcError: _rpcError });
 

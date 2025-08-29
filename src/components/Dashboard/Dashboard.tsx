@@ -31,6 +31,7 @@ const Dashboard: React.FC<DashboardProps> = ({ onNavigate }) => {
   const [activeTab, setActiveTab] = useState<'overview' | 'assetAnalytics' | 'issueAnalytics'>(
     'overview'
   );
+  const [labMap, setLabMap] = useState<Map<string, string>>(new Map());
 
   const fetchDashboardStats = async (): Promise<DashboardStats> => {
     // Fetch total assets
@@ -61,8 +62,26 @@ const Dashboard: React.FC<DashboardProps> = ({ onNavigate }) => {
     enabled: !!profile,
   });
 
+  // Fetch labs for mapping
+  const fetchLabs = async (): Promise<void> => {
+    const { data: labsData, error: labsError } = await supabase
+      .from('labs')
+      .select('id, name');
+
+    if (labsError) throw labsError;
+    
+    const newLabMap = new Map<string, string>();
+    (labsData || []).forEach((lab: { id: string; name: string }) => {
+      newLabMap.set(lab.id, lab.name);
+    });
+    setLabMap(newLabMap);
+  };
+
   // Fetch assets for analytics
   const fetchAssets = async (): Promise<Asset[]> => {
+    // Fetch labs first
+    await fetchLabs();
+    
     // console.log('Fetching assets for analytics...');
     const { data, error } = await supabase
       .from('assets')
@@ -86,6 +105,9 @@ const Dashboard: React.FC<DashboardProps> = ({ onNavigate }) => {
 
   // Fetch issues for analytics
   const fetchIssues = async (): Promise<AssetIssue[]> => {
+    // Fetch labs first
+    await fetchLabs();
+    
     // console.log('Fetching issues for analytics...');
     const { data, error } = await supabase
       .from('asset_issues')
@@ -98,7 +120,7 @@ const Dashboard: React.FC<DashboardProps> = ({ onNavigate }) => {
       .order('reported_at', { ascending: false });
 
     if (error) {
-      // console.error('Error fetching issues:', error);
+      // console.error('Error极速赛车开奖直播 fetching issues:', error);
       throw error;
     }
 
@@ -352,9 +374,9 @@ const Dashboard: React.FC<DashboardProps> = ({ onNavigate }) => {
         </>
       )}
 
-      {activeTab === 'assetAnalytics' && <AssetAnalyticsDashboard assets={assets} />}
+      {activeTab === 'assetAnalytics' && <AssetAnalyticsDashboard assets={assets} labs={Object.fromEntries(labMap)} />}
 
-      {activeTab === 'issueAnalytics' && <IssueAnalyticsDashboard issues={issues} />}
+      {activeTab === 'issueAnalytics' && <IssueAnalyticsDashboard issues={issues} labs={Object.fromEntries(labMap)} />}
     </div>
   );
 };

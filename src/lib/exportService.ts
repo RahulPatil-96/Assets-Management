@@ -2,25 +2,54 @@ import { Asset, AssetIssue } from './supabase';
 import { AnalyticsService } from './analyticsService';
 import { PDFExportService } from './pdfExportService';
 import { ExcelExportService } from './excelExportService';
+import { supabase } from './supabase';
 
 export class ExportService {
   static async exportAssets(assets: Asset[], format: 'pdf' | 'excel', fileName?: string) {
     const analytics = AnalyticsService.analyzeAssets(assets);
+    
+    // Fetch lab data for mapping lab IDs to lab names
+    const { data: labsData, error } = await supabase
+      .from('labs')
+      .select('id, name');
+    
+    const labs: { [id: string]: string } = {};
+    if (!error && labsData) {
+      labsData.forEach(lab => {
+        labs[lab.id] = lab.name;
+      });
+    }
 
     if (format === 'pdf') {
-      await PDFExportService.exportAssetsToPDF(assets, analytics, fileName);
+      await PDFExportService.exportAssetsToPDF(assets, analytics, fileName, labs);
     } else {
-      await ExcelExportService.exportAssetsToExcel(assets, analytics, fileName);
+      await ExcelExportService.exportAssetsToExcel(assets, analytics, fileName, labs);
     }
   }
 
-  static async exportIssues(issues: AssetIssue[], format: 'pdf' | 'excel', fileName?: string) {
-    const analytics = AnalyticsService.analyzeIssues(issues);
+  static async exportIssues(issues: AssetIssue[], format: 'pdf' | 'excel', fileName?: string, labs?: { [id: string]: string }) {
+    // If labs mapping is not provided, fetch it
+    let labMapping = labs;
+    if (!labMapping) {
+      const { data: labsData, error } = await supabase
+        .from('labs')
+        .select('id, name');
+      
+      const fetchedLabMapping: { [id: string]: string } = {};
+      if (!error && labsData) {
+        labsData.forEach(lab => {
+          fetchedLabMapping[lab.id] = lab.name;
+        });
+      }
+      labMapping = fetchedLabMapping;
+    }
+
+    const analytics = AnalyticsService.analyzeIssues(issues, labMapping);
 
     if (format === 'pdf') {
-      await PDFExportService.exportIssuesToPDF(issues, analytics, fileName);
+      await PDFExportService.exportIssuesToPDF(issues, analytics, fileName, labMapping);
     } else {
-      await ExcelExportService.exportIssuesToExcel(issues, analytics, fileName);
+      await ExcelExportService.exportIssuesToExcel(issues, analytics, fileName, labMapping);
     }
   }
 

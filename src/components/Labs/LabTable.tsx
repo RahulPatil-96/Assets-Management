@@ -41,6 +41,12 @@ const fetchLabs = async () => {
       return;
     }
     
+    // Only HOD can create labs
+    if (profile.role !== 'HOD') {
+      setError('Only HOD can create labs');
+      return;
+    }
+    
     try {
       await LabService.createLab(newLab);
       setShowCreateForm(false);
@@ -139,12 +145,14 @@ const fetchLabs = async () => {
           </div>
         </div>
       ) : (
-        <button
-          onClick={() => setShowCreateForm(true)}
-          className='bg-blue-500 text-white px-4 py-2 rounded mb-4'
-        >
-          Create Lab
-        </button>
+        profile?.role === 'HOD' && (
+          <button
+            onClick={() => setShowCreateForm(true)}
+            className='bg-blue-500 text-white px-4 py-2 rounded mb-4'
+          >
+            Create Lab
+          </button>
+        )
       )}
 
       <div className='space-y-3'>
