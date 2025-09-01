@@ -3,14 +3,7 @@ import { useAuth } from './AuthContext';
 import { NotificationService, Notification } from '../lib/notificationService';
 import { notificationSoundService } from '../lib/notificationSoundService';
 
-interface NotificationContextType {
-  notifications: Notification[];
-  unreadCount: number;
-  loading: boolean;
-  markAsRead: (id: string) => Promise<void>;
-  markAllAsRead: () => Promise<void>;
-  refreshNotifications: () => Promise<void>;
-}
+import { NotificationContextType } from '../types/notification';
 
 const NotificationContext = createContext<NotificationContextType | undefined>(undefined);
 
@@ -40,8 +33,8 @@ export const NotificationProvider: React.FC<{ children: React.ReactNode }> = ({ 
 
       setNotifications(notificationsData);
       setUnreadCount(count);
-    } catch (error) {
-      console.error('Error fetching notifications:', error);
+    } catch (_error) {
+      // console.error('Error fetching notifications:', error);
     } finally {
       setLoading(false);
     }
@@ -52,8 +45,8 @@ export const NotificationProvider: React.FC<{ children: React.ReactNode }> = ({ 
       await NotificationService.markAsRead(id);
       setNotifications(prev => prev.map(n => (n.id === id ? { ...n, is_read: true } : n)));
       setUnreadCount(prev => Math.max(0, prev - 1));
-    } catch (error) {
-      console.error('Error marking notification as read:', error);
+    } catch (_error) {
+      // console.error('Error marking notification as read:', error);
     }
   };
 
@@ -64,8 +57,8 @@ export const NotificationProvider: React.FC<{ children: React.ReactNode }> = ({ 
       await NotificationService.markAllAsRead(user.id);
       setNotifications(prev => prev.map(n => ({ ...n, is_read: true })));
       setUnreadCount(0);
-    } catch (error) {
-      console.error('Error marking all notifications as read:', error);
+    } catch (_error) {
+      // console.error('Error marking all notifications as read:', error);
     }
   };
 

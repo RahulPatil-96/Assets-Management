@@ -155,13 +155,12 @@ export class ExcelExportService {
     const sheet = workbook.addWorksheet('Asset Details');
 
     // Titles
-    this.addTitle(sheet, 'Asset Management Report', 1, 1, 8);
-    this.addSubtitle(sheet, `Generated on: ${new Date().toLocaleDateString()}`, 2, 1, 8);
+    this.addTitle(sheet, 'Asset Management Report', 1, 1, 6);
+    this.addSubtitle(sheet, `Generated on: ${new Date().toLocaleDateString()}`, 2, 1, 6);
 
     // Summary
     const summaryData: [string, string | number][] = [
       ['Total Assets', analytics.totalAssets],
-      ['Total Quantity', analytics.totalQuantity],
       ['Total Cost', analytics.totalCost],
       ['Approved Assets', analytics.approvedAssets],
       ['Pending Approval', analytics.pendingAssets],
@@ -169,13 +168,13 @@ export class ExcelExportService {
     this.addSummary(sheet, summaryData, 4);
 
     // Add some space before next section
-    sheet.mergeCells('A9:H9');
+    sheet.mergeCells('A9:F9');
     const assetTitleCell = sheet.getCell('A9');
     assetTitleCell.value = 'Asset Details';
     assetTitleCell.font = { size: 14, bold: true };
 
     // Headers
-    const headers = ['Name', 'Type', 'Lab', 'Quantity', 'Rate', 'Total', 'Status', 'Created Date'];
+    const headers = ['Name', 'Type', 'Lab', 'Price', 'Status', 'Created Date'];
     this.addHeaders(sheet, 11, headers, 'FF3B82F6'); // Blue
 
     // Data rows
@@ -184,15 +183,11 @@ export class ExcelExportService {
       sheet.getCell(rowNum, 1).value = asset.name_of_supply;
       sheet.getCell(rowNum, 2).value = asset.asset_type;
       sheet.getCell(rowNum, 3).value = labs[asset.allocated_lab] || asset.allocated_lab;
-      sheet.getCell(rowNum, 4).value = asset.quantity;
-      sheet.getCell(rowNum, 5).value = asset.rate;
-      sheet.getCell(rowNum, 5).numFmt = '₹#,##0.00';
-      const total = asset.quantity * asset.rate;
-      sheet.getCell(rowNum, 6).value = total;
-      sheet.getCell(rowNum, 6).numFmt = '₹#,##0.00';
+      sheet.getCell(rowNum, 4).value = asset.rate;
+      sheet.getCell(rowNum, 4).numFmt = '₹#,##0.00';
 
       // Status with color + icon
-      const statusCell = sheet.getCell(rowNum, 7);
+      const statusCell = sheet.getCell(rowNum, 5);
       if (asset.approved) {
         statusCell.value = '✓ Approved';
         statusCell.fill = {
@@ -212,13 +207,13 @@ export class ExcelExportService {
       statusCell.alignment = { horizontal: 'center' };
 
       // Created date
-      const createdDateCell = sheet.getCell(rowNum, 8);
+      const createdDateCell = sheet.getCell(rowNum, 6);
       createdDateCell.value = new Date(asset.created_at);
       createdDateCell.numFmt = 'mm/dd/yyyy';
     });
 
     // Auto format columns
-    this.applyZebraStriping(sheet, 12, 11 + assets.length, 1, 8);
+    this.applyZebraStriping(sheet, 12, 11 + assets.length, 1, 6);
     this.autoFormatColumns(sheet);
 
     // Add analytics summary and tables below data rows in the same sheet
@@ -328,35 +323,41 @@ export class ExcelExportService {
     // --- Issue Details Sheet ---
     const sheet = workbook.addWorksheet('Issue Details');
 
-    this.addTitle(sheet, 'Issue Management Report', 1, 1, 6);
-    this.addSubtitle(sheet, `Generated on: ${new Date().toLocaleDateString()}`, 2, 1, 6);
+    this.addTitle(sheet, 'Issue Management Report', 1, 1, 7);
+    this.addSubtitle(sheet, `Generated on: ${new Date().toLocaleDateString()}`, 2, 1, 7);
 
-    // Summary Section
     const summaryData: [string, string | number][] = [
       ['Total Issues', analytics.totalIssues],
       ['Open Issues', analytics.openIssues],
       ['Resolved Issues', analytics.resolvedIssues],
       ['Resolution Rate', `${analytics.resolutionRate.toFixed(1)}%`],
-      ['Estimated Repair Cost', analytics.costAnalysis.estimatedRepairCost],
-      ['Replacement Cost', analytics.costAnalysis.replacementCost],
-      ['Total Potential Cost', analytics.costAnalysis.totalPotentialCost],
+      ['Total Repair Cost', analytics.costAnalysis.totalRepairCost],
     ];
     this.addSummary(sheet, summaryData, 4, 1, 2);
-
-    sheet.mergeCells('A12:F12');
+    sheet.mergeCells('A12:G12');
     const issuesTitleCell = sheet.getCell('A12');
     issuesTitleCell.value = 'Issue Details';
     issuesTitleCell.font = { size: 14, bold: true };
 
     // Headers
-    const headers = ['Asset', 'Lab', 'Description', 'Status', 'Reported Date', 'Resolved Date'];
+    const headers = [
+      'Asset',
+      'Lab',
+      'Description',
+      'Status',
+      'Reported Date',
+      'Resolved Date',
+      'Repair Cost',
+    ];
     this.addHeaders(sheet, 14, headers, 'FFEF4444'); // Red
 
     // Data rows
     issues.forEach((issue, idx) => {
       const rowNum = 15 + idx;
       sheet.getCell(rowNum, 1).value = issue.asset?.name_of_supply || 'Unknown';
-      sheet.getCell(rowNum, 2).value = issue.asset?.allocated_lab ? (labs[issue.asset.allocated_lab] || issue.asset.allocated_lab) : 'Unknown';
+      sheet.getCell(rowNum, 2).value = issue.asset?.allocated_lab
+        ? labs[issue.asset.allocated_lab] || issue.asset.allocated_lab
+        : 'Unknown';
       sheet.getCell(rowNum, 3).value = issue.issue_description;
 
       // Status with color + icon
@@ -393,9 +394,19 @@ export class ExcelExportService {
         resolvedCell.value = '-';
         resolvedCell.alignment = { horizontal: 'center' };
       }
+
+      // Repair Cost
+      const costCell = sheet.getCell(rowNum, 7);
+      if (issue.cost_required) {
+        costCell.value = issue.cost_required;
+        costCell.numFmt = '₹#,##0.00';
+      } else {
+        costCell.value = '-';
+        costCell.alignment = { horizontal: 'center' };
+      }
     });
 
-    this.applyZebraStriping(sheet, 15, 14 + issues.length, 1, 6);
+    this.applyZebraStriping(sheet, 15, 14 + issues.length, 1, 7);
     this.autoFormatColumns(sheet, 20);
 
     // Add analytics summary and tables below data rows in the same sheet
@@ -432,9 +443,7 @@ export class ExcelExportService {
     row++;
 
     const costData: [string, number][] = [
-      ['Estimated Repair Cost', analytics.costAnalysis.estimatedRepairCost],
-      ['Replacement Cost', analytics.costAnalysis.replacementCost],
-      ['Total Potential Cost', analytics.costAnalysis.totalPotentialCost],
+      ['Total Repair Cost', analytics.costAnalysis.totalRepairCost],
     ];
 
     costData.forEach(([label, value]) => {

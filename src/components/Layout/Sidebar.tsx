@@ -7,6 +7,7 @@ import {
   Settings,
   ChevronLeft,
   ChevronRight,
+  Building2,
 } from 'lucide-react';
 import { useAuth } from '../../contexts/AuthContext';
 
@@ -24,13 +25,14 @@ const Sidebar: React.FC<SidebarProps> = ({ activeTab, setActiveTab }) => {
   const getMenuItems = () => {
     const baseItems = [
       { id: 'dashboard', label: 'Dashboard', icon: BarChart3 },
-      { id: 'assets', label: 'Assets', icon: Package },
+      { id: 'assets', label: 'Assets Management', icon: Package },
     ];
 
     const roleSpecificItems = {
       HOD: [
         { id: 'alerts', label: 'System Alerts', icon: AlertTriangle },
         { id: 'transfers', label: 'Asset Transfers', icon: ArrowRightLeft },
+        { id: 'lab-management', label: 'Lab Management', icon: Building2 },
       ],
       'Lab Assistant': [
         { id: 'issues', label: 'Issue Management', icon: AlertTriangle },

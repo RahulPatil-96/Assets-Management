@@ -152,7 +152,7 @@ const NotificationBell: React.FC = () => {
     <div className='relative' ref={dropdownRef}>
       <button
         onClick={() => setIsOpen(prev => !prev)}
-        className='relative p-2 text-gray-600 hover:text-gray-900 hover:bg-gray-100 rounded-lg transition-colors'
+        className='relative p-2 text-gray-600 dark:text-gray-300 hover:text-gray-900 dark:hover:text-white hover:bg-gray-300 dark:hover:bg-gray-700 rounded-lg transition-colors'
         aria-label='Toggle notifications'
       >
         <Bell className='w-5 h-5' />
@@ -249,9 +249,11 @@ const NotificationBell: React.FC = () => {
                             <p className='text-xs sm:text-sm text-gray-900 dark:text-white leading-tight'>
                               {notification.message}
                             </p>
-                            <ChevronDown 
+                            <ChevronDown
                               className={`w-3 h-3 text-gray-400 transition-transform duration-200 ${
-                                isNotificationExpanded(notification.id) ? 'transform rotate-180' : ''
+                                isNotificationExpanded(notification.id)
+                                  ? 'transform rotate-180'
+                                  : ''
                               }`}
                             />
                           </div>
@@ -263,25 +265,32 @@ const NotificationBell: React.FC = () => {
                             <div className='mt-2 p-3 bg-gray-50 dark:bg-gray-700 rounded-md text-xs text-gray-700 dark:text-gray-300 space-y-2'>
                               <div className='flex items-center'>
                                 <User className='w-3 h-3 mr-2 text-gray-500' />
-                                <span><strong>Performed by:</strong> {notification.actor_name || 'System'}</span>
+                                <span>
+                                  <strong>Performed by:</strong>{' '}
+                                  {notification.actor_name || 'System'}
+                                </span>
                               </div>
                               <div className='flex items-center'>
                                 <Clock className='w-3 h-3 mr-2 text-gray-500' />
-                                <span><strong>Time:</strong> {new Date(notification.created_at).toLocaleString('en-US', {
-                                  year: 'numeric',
-                                  month: 'short',
-                                  day: 'numeric',
-                                  hour: '2-digit',
-                                  minute: '2-digit'
-                                })}</span>
+                                <span>
+                                  <strong>Time:</strong>{' '}
+                                  {new Date(notification.created_at).toLocaleString('en-US', {
+                                    year: 'numeric',
+                                    month: 'short',
+                                    day: 'numeric',
+                                    hour: '2-digit',
+                                    minute: '2-digit',
+                                  })}
+                                </span>
                               </div>
                               <div className='flex items-center'>
                                 <Bell className='w-3 h-3 mr-2 text-gray-500' />
-                                <span><strong>Action:</strong> {
-                                  notification.entity_type === notification.action_type 
+                                <span>
+                                  <strong>Action:</strong>{' '}
+                                  {notification.entity_type === notification.action_type
                                     ? `${notification.action_type}`
-                                    : `${notification.action_type} on ${notification.entity_type}`
-                                }</span>
+                                    : `${notification.action_type} on ${notification.entity_type}`}
+                                </span>
                                 {notification.entity_name && (
                                   <span>: {notification.entity_name}</span>
                                 )}
@@ -317,4 +326,4 @@ const NotificationBell: React.FC = () => {
   );
 };
 
-export default NotificationBell;
+export default React.memo(NotificationBell);

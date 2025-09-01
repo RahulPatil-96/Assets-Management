@@ -1,5 +1,6 @@
 import { supabase } from './supabase';
 import { toast } from 'react-hot-toast';
+import { ActivityLogValues } from '../types/activityLog';
 
 // Input validation function to prevent security vulnerabilities
 const validateInput = (input: string, fieldName: string): void => {
@@ -50,8 +51,8 @@ export interface ActivityLog {
   action_type: string;
   entity_type: string;
   entity_id: string;
-  old_values?: any;
-  new_values?: any;
+  old_values?: ActivityLogValues;
+  new_values?: ActivityLogValues;
   created_at: string;
 }
 
@@ -105,8 +106,8 @@ export class NotificationService {
               ...notification,
               actor_name: actorData?.name || '',
             };
-          } catch (actorError) {
-            console.warn('Failed to fetch actor name:', actorError);
+          } catch (_actorError) {
+            // console.warn('Failed to fetch actor name:', actorError);
             return {
               ...notification,
               actor_name: '',
@@ -220,7 +221,7 @@ export class NotificationService {
       return true;
     } catch (error) {
       // Log the error and show a toast notification
-      console.error('Error creating notifications for all users:', error);
+      // console.error('Error creating notifications for all users:', error);
       toast.error('Failed to create notifications. Please try again later.');
       throw error;
     }

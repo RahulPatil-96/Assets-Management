@@ -1,5 +1,5 @@
 import React from 'react';
-import { Package, CheckCircle, Clock, DollarSign } from 'lucide-react';
+import { Package, CheckCircle, Clock } from 'lucide-react';
 import { Asset } from '../../lib/supabase';
 import { AnalyticsService } from '../../lib/analyticsService';
 import ChartCard from './ChartCard';
@@ -34,13 +34,6 @@ const AssetAnalyticsDashboard: React.FC<AssetAnalyticsDashboardProps> = ({ asset
       icon: Clock,
       color: 'text-yellow-600',
       bgColor: 'bg-yellow-100 dark:bg-yellow-900',
-    },
-    {
-      title: 'Total Cost',
-      value: `₹${analytics.totalCost.toLocaleString()}`,
-      icon: DollarSign,
-      color: 'text-purple-600',
-      bgColor: 'bg-purple-100 dark:bg-purple-900',
     },
   ];
 
@@ -81,7 +74,7 @@ const AssetAnalyticsDashboard: React.FC<AssetAnalyticsDashboardProps> = ({ asset
           data={chartsData.statusChart}
         />
         <ChartCard title='Assets by Lab' type='bar' data={chartsData.labDistributionChart} />
-        <ChartCard title='Cost Distribution by Lab' type='bar' data={chartsData.costByLabChart} />
+        <ChartCard title='Price Distribution by Lab' type='bar' data={chartsData.costByLabChart} />
         <ChartCard title='Assets by Type' type='pie' data={chartsData.typeDistributionChart} />
       </div>
 

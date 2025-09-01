@@ -12,7 +12,7 @@ const LoginForm: React.FC = () => {
   const [password, setPassword] = useState('');
   const [name, setName] = useState('');
   const [role, setRole] = useState('');
-const [labName, setLabName] = useState('');
+  const [labName, setLabName] = useState('');
   const [labs, setLabs] = useState<{ id: string; name: string }[]>([]);
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
@@ -32,7 +32,7 @@ const [labName, setLabName] = useState('');
         const fetchedLabs = await LabService.getLabs();
         setLabs(fetchedLabs);
       } catch (error) {
-        console.error('Error fetching labs:', error);
+        // console.error('Error fetching labs:', error);
       }
     };
 
@@ -78,16 +78,24 @@ const [labName, setLabName] = useState('');
       if (isLogin) {
         const { error: signInError } = await signIn(email, password, rememberMe);
         if (signInError) {
+          // console.error('SignIn error in LoginForm:', signInError);
           setError((signInError as { message?: string }).message || 'An error occurred');
         } else {
           navigate('/');
         }
       } else {
-        const { error: signUpError } = await signUp(email, password, { name, role, lab_id: labName });
-        if (signUpError) setError((signUpError as { message?: string }).message || 'An error occurred');
+        const { error: signUpError } = await signUp(email, password, {
+          name,
+          role,
+          lab_id: labName,
+        });
+        if (signUpError) {
+          // console.error('SignUp error in LoginForm:', signUpError);
+          setError((signUpError as { message?: string }).message || 'An error occurred');
+        }
       }
     } catch (err: unknown) {
-      // console.error('Auth error:', err);
+      // console.error('Auth error in LoginForm:', err);
       setError((err as Error)?.message || 'An unexpected error occurred');
     } finally {
       setLoading(false);
@@ -251,12 +259,14 @@ const [labName, setLabName] = useState('');
             </div>
 
             <Button
+              type='submit'
               variant='gradient'
-              text={loading ? 'Processing...' : isLogin ? 'Sign In' : 'Create Account'}
               fullWidth={true}
               loading={loading}
-              startIcon={isLogin ? <Lock className='ml-2' /> : <UserRoundPlus className='ml-2' />}
-            />
+              icon={isLogin ? <Lock className='ml-2' /> : <UserRoundPlus className='ml-2' />}
+            >
+              <span>{loading ? 'Processing...' : isLogin ? 'Sign In' : 'Create Account'}</span>
+            </Button>
 
             <p className='text-white/60 text-sm text-center pt-4'>
               {isLogin && (

@@ -9,12 +9,16 @@ if (!supabaseUrl || !supabaseAnonKey) {
   );
 }
 
-export const supabase = createClient(supabaseUrl, supabaseAnonKey);
+export const supabase = createClient(supabaseUrl, supabaseAnonKey, {
+  auth: {
+    storage: sessionStorage,
+  },
+});
 
 // Database types
 export type UserRole = 'HOD' | 'Lab Assistant' | 'Lab Incharge';
 export type IssueStatus = 'open' | 'resolved';
-export type TransferStatus = 'pending' | 'received';
+export type TransferStatus = 'pending' | 'approved' | 'received';
 
 export interface UserProfile {
   id: string;
@@ -71,6 +75,16 @@ export interface AssetIssue {
   resolver?: UserProfile;
 }
 
+export interface Lab {
+  id: string;
+  name: string;
+  description?: string;
+  location: string;
+  lab_identifier: string;
+  created_at: string;
+  updated_at: string;
+}
+
 export interface AssetTransfer {
   id: string;
   asset_id: string;
@@ -78,6 +92,8 @@ export interface AssetTransfer {
   to_lab: string;
   initiated_by?: string;
   initiated_at: string;
+  approved_by_lab_incharge?: string;
+  approved_at_lab_incharge?: string;
   received_by?: string;
   received_at?: string;
   status: TransferStatus;
@@ -85,4 +101,6 @@ export interface AssetTransfer {
   asset?: Asset;
   initiator?: UserProfile;
   receiver?: UserProfile;
+  from_lab_data?: Lab;
+  to_lab_data?: Lab;
 }

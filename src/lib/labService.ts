@@ -12,12 +12,13 @@ import {
   LabIssueFilters,
   type LabAccess,
 } from '../types/lab';
+import { Asset } from '../types';
 
 // Lab Management Service
 export class LabService {
   // Lab CRUD operations
   static async getLabs(filters?: LabFilters): Promise<Lab[]> {
-  let query = supabase.from('labs').select(`*`);
+    let query = supabase.from('labs').select(`*`);
 
     if (filters?.search) {
       query = query.ilike('name', `%${filters.search}%`);
@@ -27,7 +28,7 @@ export class LabService {
       query = query.ilike('location', `%${filters.location}%`);
     }
 
-  // Removed incharge_id filter as labs no longer have incharge
+    // Removed incharge_id filter as labs no longer have incharge
 
     if (filters?.has_open_issues) {
       query = query.gt('open_issues_count', 0);
@@ -257,7 +258,7 @@ export class LabService {
   }
 
   // Lab Assets
-  static async getLabAssets(labId: string): Promise<any[]> {
+  static async getLabAssets(labId: string): Promise<Asset[]> {
     const { data, error } = await supabase
       .from('assets')
       .select('*')
@@ -283,6 +284,5 @@ export class LabService {
 
 // Permission checking function (to be created in database)
 export const createPermissionFunction = async () => {
-  const { error } = await supabase.rpc('create_lab_permission_function');
-  if (error) console.error('Error creating permission function:', error);
+  const { error: _error } = await supabase.rpc('create_lab_permission_function');
 };

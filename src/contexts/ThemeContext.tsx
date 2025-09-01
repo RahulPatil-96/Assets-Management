@@ -1,11 +1,5 @@
 import React, { createContext, useContext, useEffect, useState } from 'react';
-
-// Define the context type
-type ThemeContextType = {
-  theme: string;
-  toggleTheme: () => void;
-  isDark: boolean;
-};
+import { ThemeContextType } from '../types/theme';
 
 // Create the context
 const ThemeContext = createContext<ThemeContextType | undefined>(undefined);

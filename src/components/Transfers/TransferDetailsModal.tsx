@@ -148,6 +148,9 @@ const TransferDetailsModal: React.FC<TransferDetailsModalProps> = ({ transfer, o
               </h3>
               <div className='space-y-1'>
                 <p className='text-sm'>
+                  <span className='font-medium'>Asset ID:</span> {transfer.asset?.asset_id || 'N/A'}
+                </p>
+                <p className='text-sm'>
                   <span className='font-medium'>Asset Name:</span>{' '}
                   {transfer.asset?.name_of_supply || 'N/A'}
                 </p>

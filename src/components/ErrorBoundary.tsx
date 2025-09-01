@@ -1,48 +1,130 @@
-import { Component, ErrorInfo, ReactNode } from 'react';
-import { AlertTriangle } from 'lucide-react';
+import React, { Component, ErrorInfo, ReactNode } from 'react';
+import { AlertTriangle, RefreshCw } from 'lucide-react';
 
-interface Props {
+/**
+ * Props for the ErrorBoundary component
+ */
+interface ErrorBoundaryProps {
+  /** The children components to render */
   children: ReactNode;
+  /** Custom fallback UI component */
   fallback?: ReactNode;
+  /** Function called when an error occurs */
   onError?: (error: Error, errorInfo: ErrorInfo) => void;
 }
 
-interface State {
+/**
+ * State for the ErrorBoundary component
+ */
+interface ErrorBoundaryState {
+  /** The error that was caught */
   hasError: boolean;
+  /** The error information */
   error?: Error;
+  /** The error info */
+  errorInfo?: ErrorInfo;
 }
 
-class ErrorBoundary extends Component<Props, State> {
-  public state: State = {
-    hasError: false,
-  };
-
-  public static getDerivedStateFromError(error: Error): State {
-    return { hasError: true, error };
+/**
+ * ErrorBoundary component to catch JavaScript errors anywhere in the component tree
+ * and display a fallback UI instead of the component tree that crashed.
+ *
+ * @example
+ * ```tsx
+ * <ErrorBoundary>
+ *   <MyComponent />
+ * </ErrorBoundary>
+ * ```
+ */
+class ErrorBoundary extends Component<ErrorBoundaryProps, ErrorBoundaryState> {
+  /**
+   * Initializes the ErrorBoundary component state
+   */
+  constructor(props: ErrorBoundaryProps) {
+    super(props);
+    this.state = {
+      hasError: false,
+    };
   }
 
-  public componentDidCatch(error: Error, errorInfo: ErrorInfo) {
-    // console.error('ErrorBoundary caught an error:', error, errorInfo);
+  /**
+   * Catches errors thrown in child components
+   * @param error - The error that was thrown
+   * @param errorInfo - Additional error information
+   */
+  static getDerivedStateFromError(error: Error): ErrorBoundaryState {
+    // Update state so the next render will show the fallback UI
+    return {
+      hasError: true,
+      error,
+    };
+  }
+
+  /**
+   * Logs error information and calls the onError callback if provided
+   * @param error - The error that was thrown
+   * @param errorInfo - Additional error information
+   */
+  componentDidCatch(error: Error, errorInfo: ErrorInfo): void {
+    // console.error('Error caught by ErrorBoundary:', error, errorInfo);
+
+    // Call the onError callback if provided
     if (this.props.onError) {
       this.props.onError(error, errorInfo);
     }
   }
 
-  public render() {
+  /**
+   * Handles the retry action to reset the error state
+   */
+  handleRetry = (): void => {
+    this.setState({
+      hasError: false,
+      error: undefined,
+      errorInfo: undefined,
+    });
+  };
+
+  /**
+   * Renders the component
+   * @returns The rendered component
+   */
+  render(): ReactNode {
     if (this.state.hasError) {
+      // Render custom fallback UI if provided
       if (this.props.fallback) {
         return this.props.fallback;
       }
 
+      // Default fallback UI
       return (
-        <div className='p-4 bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 rounded-lg'>
-          <div className='flex items-center space-x-3'>
-            <AlertTriangle className='w-5 h-5 text-red-600 dark:text-red-400' />
-            <div>
-              <h3 className='font-medium text-red-800 dark:text-red-200'>Something went wrong</h3>
-              <p className='text-sm text-red-600 dark:text-red-400 mt-1'>
-                {this.state.error?.message || 'An unexpected error occurred'}
+        <div className='min-h-screen bg-gray-50 dark:bg-gray-900 flex items-center justify-center p-4'>
+          <div className='bg-white dark:bg-gray-800 rounded-lg shadow-lg p-6 max-w-md w-full'>
+            <div className='text-center'>
+              <AlertTriangle className='w-12 h-12 text-red-500 mx-auto mb-4' />
+              <h2 className='text-xl font-semibold text-gray-900 dark:text-gray-100 mb-2'>
+                Something went wrong
+              </h2>
+              <p className='text-gray-600 dark:text-gray-400 mb-6'>
+                We encountered an unexpected error. Please try refreshing the page.
               </p>
+              {this.state.error && (
+                <details className='mb-4 text-left'>
+                  <summary className='cursor-pointer text-sm text-gray-500 dark:text-gray-400'>
+                    Error details
+                  </summary>
+                  <pre className='mt-2 text-xs text-red-600 dark:text-red-400 bg-red-50 dark:bg-red-900/20 p-2 rounded overflow-auto'>
+                    {this.state.error.toString()}
+                  </pre>
+                </details>
+              )}
+              <button
+                onClick={this.handleRetry}
+                className='inline-flex items-center px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2 transition-colors duration-200'
+              >
+                <RefreshCw className='w-4 h-4 mr-2' />
+                Try Again
+              </button>
             </div>
           </div>
         </div>

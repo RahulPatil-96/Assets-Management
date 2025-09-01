@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { X } from 'lucide-react';
 import { Asset, supabase } from '../../lib/supabase';
+import { LabService } from '../../lib/labService';
 
 export interface AssetDetailsModalProps {
   asset: Asset | null;
@@ -22,8 +23,8 @@ const AssetDetailsModal: React.FC<AssetDetailsModalProps> = ({ asset, onClose })
 
       setLoadingLab(true);
       try {
-        // Since labs table doesn't exist, we'll use the allocated_lab value directly
-        setLabName(asset.allocated_lab);
+        const lab = await LabService.getLab(asset.allocated_lab);
+        setLabName(lab?.name || asset.allocated_lab);
       } catch (_error) {
         // console.error('Error fetching lab name:', _error);
         setLabName(asset.allocated_lab); // Fallback to ID if error
@@ -131,9 +132,6 @@ const AssetDetailsModal: React.FC<AssetDetailsModalProps> = ({ asset, onClose })
                 Financial Details
               </h3>
               <div className='space-y-1'>
-                <p className='text-sm'>
-                  <span className='font-medium'>Quantity:</span> {asset.quantity}
-                </p>
                 <p className='text-sm'>
                   <span className='font-medium'>Rate:</span> ₹{asset.rate}
                 </p>

@@ -1,41 +1,60 @@
 import React from 'react';
-import { Bar, Pie, Doughnut } from 'react-chartjs-2';
+import { Bar, Pie, Doughnut, Line } from 'react-chartjs-2';
 import {
   Chart as ChartJS,
   CategoryScale,
   LinearScale,
   BarElement,
   ArcElement,
+  LineElement,
+  PointElement,
   Title,
   Tooltip,
   Legend,
 } from 'chart.js';
 
-ChartJS.register(CategoryScale, LinearScale, BarElement, ArcElement, Title, Tooltip, Legend);
+ChartJS.register(
+  CategoryScale,
+  LinearScale,
+  BarElement,
+  ArcElement,
+  LineElement,
+  PointElement,
+  Title,
+  Tooltip,
+  Legend
+);
 
 interface ChartCardProps {
   title: string;
-  type: 'bar' | 'pie' | 'doughnut';
+  type: 'bar' | 'pie' | 'doughnut' | 'line';
   data: {
     labels: string[];
     data: number[];
     backgroundColor: string[];
+    datasets?: any[];
   };
   className?: string;
 }
 
 const ChartCard: React.FC<ChartCardProps> = ({ title, type, data, className = '' }) => {
-  const chartData = {
-    labels: data.labels,
-    datasets: [
-      {
-        data: data.data,
-        backgroundColor: data.backgroundColor,
-        borderColor: data.backgroundColor.map(color => color.replace('FF', '')),
-        borderWidth: 1,
-      },
-    ],
-  };
+  const chartData =
+    type === 'line'
+      ? {
+          labels: data.labels,
+          datasets: data.datasets || [],
+        }
+      : {
+          labels: data.labels,
+          datasets: [
+            {
+              data: data.data,
+              backgroundColor: data.backgroundColor,
+              borderColor: data.backgroundColor.map(color => color.replace('FF', '')),
+              borderWidth: 1,
+            },
+          ],
+        };
 
   const options = {
     responsive: true,
@@ -59,6 +78,8 @@ const ChartCard: React.FC<ChartCardProps> = ({ title, type, data, className = ''
         return <Pie data={chartData} options={options} />;
       case 'doughnut':
         return <Doughnut data={chartData} options={options} />;
+      case 'line':
+        return <Line data={chartData} options={options} />;
       default:
         return null;
     }

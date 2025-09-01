@@ -12,6 +12,7 @@ interface IssueAnalyticsDashboardProps {
 const IssueAnalyticsDashboard: React.FC<IssueAnalyticsDashboardProps> = ({ issues, labs }) => {
   const analytics = AnalyticsService.analyzeIssues(issues, labs);
   const chartsData = AnalyticsService.generateIssueChartsData(analytics);
+  const labWiseRepairCostData = AnalyticsService.generateLabWiseRepairCostData(issues, labs);
 
   const statCards = [
     {
@@ -81,6 +82,7 @@ const IssueAnalyticsDashboard: React.FC<IssueAnalyticsDashboardProps> = ({ issue
           data={chartsData.statusChart}
         />
         <ChartCard title='Issues by Lab' type='bar' data={chartsData.labDistributionChart} />
+        <ChartCard title='Lab-wise Repair Cost' type='bar' data={labWiseRepairCostData} />
         <ChartCard title='Cost Analysis' type='bar' data={chartsData.costAnalysisChart} />
       </div>
 
@@ -104,16 +106,39 @@ const IssueAnalyticsDashboard: React.FC<IssueAnalyticsDashboardProps> = ({ issue
             </div>
           </div>
 
+          {/* Repair Cost by Lab */}
+          <div>
+            <h4 className='font-medium text-gray-700 dark:text-gray-300 mb-3'>
+              Repair Cost by Lab
+            </h4>
+            <div className='space-y-2'>
+              {Object.entries(
+                labWiseRepairCostData.labels.reduce(
+                  (acc, lab, index) => {
+                    acc[lab] = labWiseRepairCostData.data[index];
+                    return acc;
+                  },
+                  {} as { [lab: string]: number }
+                )
+              ).map(([lab, cost]) => (
+                <div key={lab} className='flex justify-between items-center text-sm'>
+                  <span className='text-gray-600 dark:text-gray-400'>{lab}</span>
+                  <span className='font-medium text-gray-900 dark:text-gray-100'>
+                    ₹{cost.toLocaleString()}
+                  </span>
+                </div>
+              ))}
+            </div>
+          </div>
+
           {/* Cost Analysis */}
           <div>
             <h4 className='font-medium text-gray-700 dark:text-gray-300 mb-3'>Cost Analysis</h4>
             <div className='space-y-2'>
               <div className='flex justify-between items-center'>
-                <span className='text-sm text-gray-600 dark:text-gray-400'>
-                  Total Repair Cost
-                </span>
+                <span className='text-sm text-gray-600 dark:text-gray-400'>Total Repair Cost</span>
                 <span className='font-medium text-gray-900 dark:text-gray-100'>
-                  ₹{analytics.costAnalysis.totalRepairCost.toLocaleString()}
+                  ₹{(analytics.costAnalysis.totalRepairCost ?? 0).toLocaleString()}
                 </span>
               </div>
             </div>

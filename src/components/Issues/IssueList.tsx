@@ -1,12 +1,25 @@
 import React, { useState, useEffect } from 'react';
 import { useQuery } from '@tanstack/react-query';
-import { AlertTriangle, Plus, CheckCircle, User, Eye, BarChart3 } from 'lucide-react';
+import {
+  AlertTriangle,
+  Plus,
+  CheckCircle,
+  Eye,
+  BarChart3,
+  ChevronLeft,
+  ChevronRight,
+  Filter,
+} from 'lucide-react';
 import { useAuth } from '../../contexts/AuthContext';
 import { supabase, AssetIssue } from '../../lib/supabase';
 import IssueForm from './IssueForm';
 import IssueDetailsModalWithErrorBoundary from './IssueDetailsModalWithErrorBoundary';
 import IssueAnalyticsDashboard from '../Analytics/IssueAnalyticsDashboard';
 import ExportButton from '../Export/ExportButton';
+import { ListItemSkeleton } from '../Layout/LoadingSkeleton';
+import FilterDropdown from '../FilterDropdown';
+import DateRangePicker from '../DateRangePicker';
+import Button from '../Button';
 
 const IssueListComponent: React.FC<{ searchTerm: string }> = ({ searchTerm: propSearchTerm }) => {
   const { profile } = useAuth();
@@ -22,18 +35,32 @@ const IssueListComponent: React.FC<{ searchTerm: string }> = ({ searchTerm: prop
   const [remark, setRemark] = useState<string>('');
   const [costRequired, setCostRequired] = useState<string>('');
   const [labMap, setLabMap] = useState<Map<string, string>>(new Map());
+  const [currentPage, setCurrentPage] = useState(1);
+  const [itemsPerPage, setItemsPerPage] = useState(20);
 
   type AssetIssueWithLabName = AssetIssue & { lab_name?: string };
-  const fetchIssues = async (): Promise<AssetIssueWithLabName[]> => {
-    // Fetch issues and labs in parallel
-    const [{ data: issuesData, error: issuesError }, { data: labsData, error: labsError }] = await Promise.all([
+  const fetchIssues = async (): Promise<{
+    issues: AssetIssueWithLabName[];
+    totalCount: number;
+  }> => {
+    // Calculate pagination range
+    const from = (currentPage - 1) * itemsPerPage;
+    const to = from + itemsPerPage - 1;
+
+    // Fetch issues with pagination and labs in parallel
+    const [
+      { data: issuesData, error: issuesError, count: totalCount },
+      { data: labsData, error: labsError },
+    ] = await Promise.all([
       supabase
         .from('asset_issues')
-        .select(`*, asset:assets(name_of_supply, allocated_lab, asset_id), reporter:user_profiles!reported_by(name, role), resolver:user_profiles!resolved_by(name, role)`) // keep existing fields
-        .order('reported_at', { ascending: false }),
-      supabase
-        .from('labs')
-        .select('id, name'),
+        .select(
+          `*, asset:assets(name_of_supply, allocated_lab, asset_id), reporter:user_profiles!reported_by(name, role), resolver:user_profiles!resolved_by(name, role)`,
+          { count: 'exact' }
+        )
+        .order('reported_at', { ascending: false })
+        .range(from, to),
+      supabase.from('labs').select('id, name'),
     ]);
 
     if (issuesError) throw issuesError;
@@ -45,20 +72,27 @@ const IssueListComponent: React.FC<{ searchTerm: string }> = ({ searchTerm: prop
     });
     setLabMap(newLabMap);
     // Attach lab name to each issue
-    return (issuesData || []).map((issue: any) => ({
+    const issues = (issuesData || []).map((issue: AssetIssue) => ({
       ...issue,
-      lab_name: issue.asset ? newLabMap.get(issue.asset.allocated_lab) || issue.asset.allocated_lab : undefined,
+      lab_name: issue.asset
+        ? newLabMap.get(issue.asset.allocated_lab) || issue.asset.allocated_lab
+        : undefined,
     }));
+
+    return { issues, totalCount: totalCount || 0 };
   };
 
   const {
-    data: issues = [],
+    data: issuesData = { issues: [], totalCount: 0 },
     isLoading,
     refetch,
   } = useQuery({
-    queryKey: ['issues'],
+    queryKey: ['issues', currentPage, itemsPerPage],
     queryFn: fetchIssues,
   });
+
+  const issues = issuesData.issues;
+  const totalCount = issuesData.totalCount;
 
   useEffect(() => {
     // Subscribe to real-time changes in the asset_issues table
@@ -71,8 +105,41 @@ const IssueListComponent: React.FC<{ searchTerm: string }> = ({ searchTerm: prop
           schema: 'public',
           table: 'asset_issues',
         },
-        () => {
-          refetch();
+        payload => {
+          // Only refetch if the change is relevant to the current view
+          // Check if the changed issue matches current filters
+          const changedIssue = payload.new as AssetIssue;
+          const matchesCurrentFilters = () => {
+            const matchesSearch =
+              propSearchTerm === '' ||
+              changedIssue.asset?.name_of_supply
+                ?.toLowerCase()
+                .includes(propSearchTerm.toLowerCase()) ||
+              (changedIssue.asset?.asset_id &&
+                changedIssue.asset.asset_id
+                  .toString()
+                  .toLowerCase()
+                  .includes(propSearchTerm.toLowerCase()));
+
+            const matchesStatus = filterStatus === 'all' || changedIssue.status === filterStatus;
+            const matchesLab =
+              filterLab === 'all' || changedIssue.asset?.allocated_lab === filterLab;
+            const matchesType =
+              filterType === 'all' ||
+              changedIssue.asset?.name_of_supply?.toLowerCase().includes(filterType.toLowerCase());
+
+            const issueDate = new Date(changedIssue.reported_at);
+            const from = new Date(fromDate);
+            const to = new Date(toDate);
+            const matchesDate = (!fromDate || issueDate >= from) && (!toDate || issueDate <= to);
+
+            return matchesSearch && matchesStatus && matchesLab && matchesType && matchesDate;
+          };
+
+          // Only refetch if the changed issue matches current filters or if it's a delete operation
+          if (payload.eventType === 'DELETE' || matchesCurrentFilters()) {
+            refetch();
+          }
         }
       )
       .subscribe();
@@ -80,7 +147,7 @@ const IssueListComponent: React.FC<{ searchTerm: string }> = ({ searchTerm: prop
     return () => {
       supabase.removeChannel(subscription);
     };
-  }, [refetch]);
+  }, [refetch, propSearchTerm, filterStatus, filterLab, filterType, fromDate, toDate]);
 
   const handleResolve = async (
     issueId: string,
@@ -139,47 +206,58 @@ const IssueListComponent: React.FC<{ searchTerm: string }> = ({ searchTerm: prop
   };
 
   const canResolve = (issue: AssetIssue) =>
-    profile?.role === 'Lab Assistant' && issue.status === 'open';
+    profile?.role === 'Lab Assistant' &&
+    issue.status === 'open' &&
+    profile.lab_id === issue.asset?.allocated_lab;
 
-  const filteredIssues = issues.filter(issue => {
-    const matchesSearch =
-      propSearchTerm === '' ||
-      issue.asset?.name_of_supply?.toLowerCase().includes(propSearchTerm.toLowerCase()) ||
-      (issue.asset?.asset_id &&
-        issue.asset.asset_id.toString().toLowerCase().includes(propSearchTerm.toLowerCase()));
-    const matchesStatus = filterStatus === 'all' || issue.status === filterStatus;
-    const matchesLab = filterLab === 'all' || issue.asset?.allocated_lab === filterLab;
-    const matchesType =
-      filterType === 'all' ||
-      issue.asset?.name_of_supply?.toLowerCase().includes(filterType.toLowerCase());
+  const filteredIssues = React.useMemo(
+    () =>
+      issues
+        .filter(issue => {
+          const matchesSearch =
+            propSearchTerm === '' ||
+            issue.asset?.name_of_supply?.toLowerCase().includes(propSearchTerm.toLowerCase()) ||
+            (issue.asset?.asset_id &&
+              issue.asset.asset_id.toString().toLowerCase().includes(propSearchTerm.toLowerCase()));
+          const matchesStatus = filterStatus === 'all' || issue.status === filterStatus;
+          const matchesLab = filterLab === 'all' || issue.asset?.allocated_lab === filterLab;
+          const matchesType =
+            filterType === 'all' ||
+            issue.asset?.name_of_supply?.toLowerCase().includes(filterType.toLowerCase());
 
-    const issueDate = new Date(issue.reported_at);
-    const from = new Date(fromDate);
-    const to = new Date(toDate);
-    const matchesDate = (!fromDate || issueDate >= from) && (!toDate || issueDate <= to);
+          const issueDate = new Date(issue.reported_at);
+          const from = new Date(fromDate);
+          const to = new Date(toDate);
+          const matchesDate = (!fromDate || issueDate >= from) && (!toDate || issueDate <= to);
 
-    return matchesSearch && matchesStatus && matchesLab && matchesType && matchesDate;
-  });
+          return matchesSearch && matchesStatus && matchesLab && matchesType && matchesDate;
+        })
+        .sort((a, b) => {
+          // Sort by status: open issues first, then resolved issues
+          if (a.status === 'open' && b.status === 'resolved') return -1;
+          if (a.status === 'resolved' && b.status === 'open') return 1;
+
+          // If same status, sort by reported date (newest first)
+          return new Date(b.reported_at).getTime() - new Date(a.reported_at).getTime();
+        }),
+    [issues, propSearchTerm, filterStatus, filterLab, filterType, fromDate, toDate]
+  );
 
   if (isLoading) {
     return (
       <div className='p-6'>
         <div className='animate-pulse'>
-          <div className='h-8 bg-gray-200 rounded w-1/4 mb-6'></div>
-          <div className='space-y-4'>
-            {[1, 2, 3].map(i => (
-              <div key={i} className='h-24 bg-gray-200 rounded'></div>
-            ))}
-          </div>
+          <div className='h-8 bg-gray-200 dark:bg-gray-700 rounded w-1/4 mb-6'></div>
+          <ListItemSkeleton count={3} className='h-24' />
         </div>
       </div>
     );
   }
 
   return (
-    <div className='p-6'>
-      <div className='flex justify-between items-center mb-6'>
-        <h1 className='text-2xl font-bold text-gray-900 dark:text-gray-100'>
+    <div className='p-4 sm:p-6 overflow-x-hidden'>
+      <div className='flex flex-col sm:flex-row justify-between items-center mb-6'>
+        <h1 className='text-2xl font-bold text-gray-900 dark:text-gray-100 mb-4 sm:mb-0'>
           {profile?.role === 'Lab Incharge' ? 'Report Issues' : 'Issue Management'}
         </h1>
         <div className='flex items-center space-x-4'>
@@ -209,7 +287,8 @@ const IssueListComponent: React.FC<{ searchTerm: string }> = ({ searchTerm: prop
           }`}
         >
           <AlertTriangle className='w-4 h-4 inline mr-2' />
-          Issue List
+          <span className='hidden sm:inline'>Issue List</span>
+          <span className='sm:hidden'>List</span>
         </button>
         <button
           onClick={() => setActiveTab('analytics')}
@@ -220,94 +299,69 @@ const IssueListComponent: React.FC<{ searchTerm: string }> = ({ searchTerm: prop
           }`}
         >
           <BarChart3 className='w-4 h-4 inline mr-2' />
-          Analytics
+          <span className='hidden sm:inline'>Analytics</span>
+          <span className='sm:hidden'>Stats</span>
         </button>
       </div>
 
       {/* Filters */}
-      <div className='bg-white dark:bg-gray-800 rounded-lg shadow-sm border border-gray-200 dark:border-gray-700 p-4 mb-6'>
-        <div className='flex flex-col sm:flex-row gap-4'>
-          {/* Status Filter */}
-          <div className='flex items-center space-x-2'>
-            <select
-              value={filterStatus}
-              onChange={e => setFilterStatus(e.target.value)}
-              className='px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg focus:ring-2 focus:ring-red-500 focus:border-transparent dark:bg-gray-700 dark:text-gray-200'
-            >
-              <option value='all'>All Status</option>
-              <option value='open'>Open</option>
-              <option value='resolved'>Resolved</option>
-            </select>
+      <div className='bg-white dark:bg-gray-800 rounded-lg shadow-sm border border-gray-200 dark:border-gray-700 p-4 mb-4'>
+        <div className='flex flex-wrap gap-4'>
+          <div className='flex items-center gap-2 text-gray-600 dark:text-gray-300 font-medium'>
+            <Filter className='w-4 h-4' />
+            <span>Filters:</span>
           </div>
+          <FilterDropdown
+            label='Status:'
+            value={filterStatus}
+            onChange={setFilterStatus}
+            options={[
+              { value: 'all', label: 'All Status' },
+              { value: 'open', label: 'Open' },
+              { value: 'resolved', label: 'Resolved' },
+            ]}
+            className='w-auto min-w-[100px]'
+          />
 
-          {/* Lab Filter */}
-          <div className='flex items-center space-x-2'>
-            <select
-              value={filterLab}
-              onChange={e => setFilterLab(e.target.value)}
-              className='px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg focus:ring-2 focus:ring-red-500 focus:border-transparent dark:bg-gray-700 dark:text-gray-200'
-            >
-              <option value='all'>All Labs</option>
-              {Array.from(
+          <FilterDropdown
+            label='Lab:'
+            value={filterLab}
+            onChange={setFilterLab}
+            options={[
+              { value: 'all', label: 'All Labs' },
+              ...Array.from(
                 new Set(issues.map(issue => issue.asset?.allocated_lab).filter(Boolean))
-              ).map(lab => (
-                <option key={lab} value={lab}>
-                  {lab}
-                </option>
-              ))}
-            </select>
-          </div>
+              ).map(labId => ({
+                value: labId as string,
+                label: labMap.get(labId as string) || (labId as string),
+              })),
+            ]}
+            className='w-auto min-w-[100px]'
+          />
 
-          {/* Asset Type Filter */}
-          <div className='flex items-center space-x-2'>
-            <select
-              value={filterType}
-              onChange={e => setFilterType(e.target.value)}
-              className='px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg focus:ring-2 focus:ring-red-500 focus:border-transparent dark:bg-gray-700 dark:text-gray-200'
-            >
-              <option value='all'>All Types</option>
-              {Array.from(
+          <FilterDropdown
+            label='Type:'
+            value={filterType}
+            onChange={setFilterType}
+            options={[
+              { value: 'all', label: 'All Types' },
+              ...Array.from(
                 new Set(issues.map(issue => issue.asset?.name_of_supply).filter(Boolean))
-              ).map(type => (
-                <option key={type} value={type}>
-                  {type}
-                </option>
-              ))}
-            </select>
-          </div>
+              ).map(type => ({
+                value: type as string,
+                label: type as string,
+              })),
+            ]}
+            className='w-auto min-w-[100px]'
+          />
 
-          {/* Date Filters */}
-          <div className='flex items-center space-x-2'>
-            <label
-              htmlFor='fromDate'
-              className='text-gray-700 dark:text-gray-300 text-sm whitespace-nowrap'
-            >
-              From:
-            </label>
-            <input
-              type='date'
-              id='fromDate'
-              value={fromDate}
-              onChange={e => setFromDate(e.target.value)}
-              className='px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg focus:ring-2 focus:ring-red-500 focus:border-transparent dark:bg-gray-700 dark:text-gray-200'
-            />
-          </div>
-
-          <div className='flex items-center space-x-2'>
-            <label
-              htmlFor='toDate'
-              className='text-gray-700 dark:text-gray-300 text-sm whitespace-nowrap'
-            >
-              To:
-            </label>
-            <input
-              type='date'
-              id='toDate'
-              value={toDate}
-              onChange={e => setToDate(e.target.value)}
-              className='px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg focus:ring-2 focus:ring-red-500 focus:border-transparent dark:bg-gray-700 dark:text-gray-200'
-            />
-          </div>
+          <DateRangePicker
+            fromDate={fromDate}
+            onFromDateChange={setFromDate}
+            toDate={toDate}
+            onToDateChange={setToDate}
+            className='w-auto min-w-[200px]'
+          />
         </div>
       </div>
 
@@ -315,86 +369,174 @@ const IssueListComponent: React.FC<{ searchTerm: string }> = ({ searchTerm: prop
       {activeTab === 'list' ? (
         <>
           {/* Issues List */}
-          <div className='space-y-4'>
+          <div className='bg-white dark:bg-gray-800 rounded-lg shadow-sm border border-gray-200 dark:border-gray-700'>
             {filteredIssues.length === 0 ? (
-              <div className='text-center py-12 bg-white dark:bg-gray-800 rounded-lg shadow-sm border border-gray-200 dark:border-gray-700'>
+              <div className='text-center py-12'>
                 <AlertTriangle className='w-12 h-12 text-gray-300 dark:text-gray-600 mx-auto mb-4' />
-                <p className='text-gray-500 dark:text-gray-400'>No issues found</p>
+                <p className='text-gray-500 dark:text-gray-300'>No issues found</p>
               </div>
             ) : (
-              filteredIssues.map(issue => {
-                const StatusIcon = getStatusIcon(issue.status);
-                return (
-                  <div
-                    key={issue.id}
-                    className='bg-white dark:bg-gray-800 rounded-lg shadow-sm border border-gray-200 dark:border-gray-700 p-6'
-                  >
-                    <div className='flex items-start justify-between'>
-                      <div className='flex-1'>
-                        <div className='flex items-center space-x-3 mb-2'>
-                          <StatusIcon className={`w-5 h-5 ${getStatusColor(issue.status)}`} />
-                          <span className={`font-medium ${getStatusColor(issue.status)}`}>
-                            {issue.status === 'resolved' ? 'Resolved' : 'Open'}
-                          </span>
-                          <span className='text-gray-400 dark:text-gray-500'>•</span>
-                          <span className='text-sm text-gray-500 dark:text-gray-400'>
-                            {new Date(issue.reported_at).toLocaleDateString()}
-                          </span>
-                        </div>
-
-                        <h3 className='font-semibold text-gray-900 dark:text-gray-100 mb-2'>
-                          Asset: {issue.asset?.name_of_supply}
-                        </h3>
-                        <p className='text-gray-700 dark:text-gray-300 mb-3'>
-                          {issue.issue_description}
-                        </p>
-                        {issue.status === 'resolved' && issue.remark && (
-                          <p className='text-gray-500 dark:text-gray-400 mt-2'>
-                            <span className='font-medium'>Remark:</span> {issue.remark}
-                          </p>
-                        )}
-
-                        <div className='flex items-center space-x-4 text-sm text-gray-500 dark:text-gray-400'>
-                          <div className='flex items-center space-x-1'>
-                            <User className='w-4 h-4' />
-                            <span>Reported by: {issue.reporter?.name || ''}</span>
-                          </div>
-                          <span>Lab: {issue.lab_name || issue.asset?.allocated_lab}</span>
-                          {issue.resolver && <span>Resolved by: {issue.resolver.name || ''}</span>}
-                          {issue.resolved_by && !issue.resolver && <span>Resolved by: </span>}
-                        </div>
-                      </div>
-
-                      <div className='ml-4 flex space-x-2'>
-                        <button
-                          onClick={() => handleViewDetails(issue)}
-                          className='text-gray-600 dark:text-gray-400 hover:text-gray-800 dark:hover:text-gray-300'
-                          title='View Details'
+              <div className='overflow-x-auto'>
+                <table className='w-full'>
+                  <thead className='bg-gray-50 dark:bg-gray-700 border-b border-gray-200 dark:border-gray-600'>
+                    <tr>
+                      <th className='px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-300 uppercase tracking-wider'>
+                        Sr No
+                      </th>
+                      <th className='px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-300 uppercase tracking-wider'>
+                        Asset ID
+                      </th>
+                      <th className='px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-300 uppercase tracking-wider'>
+                        Asset
+                      </th>
+                      <th className='px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-300 uppercase tracking-wider'>
+                        Issue Description
+                      </th>
+                      <th className='px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-300 uppercase tracking-wider'>
+                        Lab
+                      </th>
+                      <th className='px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-300 uppercase tracking-wider'>
+                        Status
+                      </th>
+                      <th className='px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-300 uppercase tracking-wider'>
+                        Reported By
+                      </th>
+                      <th className='px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-300 uppercase tracking-wider'>
+                        Reported At
+                      </th>
+                      <th className='px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-300 uppercase tracking-wider'>
+                        Actions
+                      </th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {filteredIssues.map((issue, index) => {
+                      const StatusIcon = getStatusIcon(issue.status);
+                      return (
+                        <tr
+                          key={issue.id}
+                          className='border-b border-gray-200 dark:border-gray-600'
                         >
-                          <Eye className='w-5 h-5' />
-                        </button>
-                        {canResolve(issue) && (
-                          <button
-                            onClick={() => handleResolveClick(issue)}
-                            className='bg-green-600 text-white px-3 py-1.5 rounded text-sm hover:bg-green-700 dark:bg-green-700 dark:hover:bg-green-800 transition-colors'
-                          >
-                            Resolve
-                          </button>
-                        )}
-                      </div>
-                    </div>
-                  </div>
-                );
-              })
+                          <td className='px-6 py-4 text-sm font-medium text-gray-900 dark:text-gray-100 max-w-xs '>
+                            {index + 1 + (currentPage - 1) * itemsPerPage}
+                          </td>
+                          <td className='px-6 py-4 text-sm font-medium text-gray-900 dark:text-gray-100 max-w-xs '>
+                            {issue.asset?.asset_id || 'Pending...'}
+                          </td>
+                          <td className='px-6 py-4 text-sm font-medium text-gray-900 dark:text-gray-100 max-w-xs '>
+                            {issue.asset?.name_of_supply || 'N/A'}
+                          </td>
+                          <td className='px-6 py-4 text-sm text-gray-900 dark:text-gray-100 max-w-xs break-words'>
+                            <div className='line-clamp-2'>{issue.issue_description}</div>
+                          </td>
+                          <td className='px-6 py-4 text-sm font-medium text-gray-900 dark:text-gray-100 max-w-xs '>
+                            {issue.lab_name || issue.asset?.allocated_lab || 'N/A'}
+                          </td>
+                          <td className='px-6 py-4 whitespace-nowrap text-sm'>
+                            <div className='flex items-center space-x-2'>
+                              <StatusIcon className={`w-4 h-4 ${getStatusColor(issue.status)}`} />
+                              <span className={getStatusColor(issue.status)}>
+                                {issue.status === 'resolved' ? 'Resolved' : 'Open'}
+                              </span>
+                            </div>
+                          </td>
+                          <td className='px-6 py-4 whitespace-nowrap text-sm text-gray-900 dark:text-gray-100'>
+                            {issue.reporter?.name || ''}
+                          </td>
+                          <td className='px-6 py-4 whitespace-nowrap text-sm text-gray-500 dark:text-gray-400'>
+                            {new Date(issue.reported_at).toLocaleDateString()}
+                          </td>
+                          <td className='px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-500 dark:text-gray-400'>
+                            <div className='flex space-x-2'>
+                              <Button
+                                onClick={() => handleViewDetails(issue)}
+                                variant='view'
+                                size='sm'
+                                className='p-1'
+                                icon={<Eye className='w-5 h-5' />}
+                              >
+                                <span className='sr-only'>View Details</span>
+                              </Button>
+                              {canResolve(issue) && (
+                                <Button
+                                  onClick={() => handleResolveClick(issue)}
+                                  variant='success'
+                                  size='sm'
+                                >
+                                  Resolve
+                                </Button>
+                              )}
+                            </div>
+                          </td>
+                        </tr>
+                      );
+                    })}
+                  </tbody>
+                </table>
+              </div>
             )}
           </div>
+
+          {/* Pagination Controls */}
+          {totalCount > itemsPerPage && (
+            <div className='flex items-center justify-between mt-6 px-6 py-4 bg-white dark:bg-gray-800 rounded-lg shadow-sm border border-gray-200 dark:border-gray-700'>
+              <div className='flex items-center space-x-2'>
+                <span className='text-sm text-gray-700 dark:text-gray-300'>
+                  Showing {Math.min((currentPage - 1) * itemsPerPage + 1, totalCount)}-
+                  {Math.min(currentPage * itemsPerPage, totalCount)} of {totalCount} issues
+                </span>
+                <select
+                  value={itemsPerPage}
+                  onChange={e => {
+                    setItemsPerPage(Number(e.target.value));
+                    setCurrentPage(1);
+                  }}
+                  className='px-2 py-1 border border-gray-300 dark:border-gray-600 rounded text-sm dark:bg-gray-700 dark:text-gray-200'
+                >
+                  <option value={10}>10 per page</option>
+                  <option value={20}>20 per page</option>
+                  <option value={50}>50 per page</option>
+                  <option value={100}>100 per page</option>
+                </select>
+              </div>
+              <div className='flex items-center space-x-2'>
+                <button
+                  onClick={() => setCurrentPage(prev => Math.max(1, prev - 1))}
+                  disabled={currentPage === 1}
+                  className='p-1 rounded border border-gray-300 dark:border-gray-600 disabled:opacity-50 disabled:cursor-not-allowed'
+                >
+                  <ChevronLeft className='w-4 h-4' />
+                </button>
+                <span className='text-sm text-gray-700 dark:text-gray-300'>
+                  Page {currentPage} of {Math.ceil(totalCount / itemsPerPage)}
+                </span>
+                <button
+                  onClick={() =>
+                    setCurrentPage(prev => Math.min(Math.ceil(totalCount / itemsPerPage), prev + 1))
+                  }
+                  disabled={currentPage >= Math.ceil(totalCount / itemsPerPage)}
+                  className='p-1 rounded border border-gray-300 dark:border-gray-600 disabled:opacity-50 disabled:cursor-not-allowed'
+                >
+                  <ChevronRight className='w-4 h-4' />
+                </button>
+              </div>
+            </div>
+          )}
         </>
       ) : (
         <IssueAnalyticsDashboard issues={filteredIssues} labs={Object.fromEntries(labMap)} />
       )}
 
       {/* Issue Form Modal */}
-      {showForm && <IssueForm onClose={() => setShowForm(false)} onSave={refetch} />}
+      {showForm && (
+        <IssueForm
+          onClose={() => setShowForm(false)}
+          onSave={() => {
+            refetch();
+            setCurrentPage(1);
+          }}
+        />
+      )}
 
       {viewingIssue && (
         <IssueDetailsModalWithErrorBoundary

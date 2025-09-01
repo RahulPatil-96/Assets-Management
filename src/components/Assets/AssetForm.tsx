@@ -15,13 +15,12 @@ const AssetForm: React.FC<AssetFormProps> = ({ asset, onClose, onSave }) => {
   const { profile } = useAuth();
   const [loading, setLoading] = useState(false);
   // Removed unused labs, setLabs, and fetchingLab
-  const [labOptions, setLabOptions] = useState<{id: string; name: string}[]>([]);
+  const [labOptions, setLabOptions] = useState<{ id: string; name: string }[]>([]);
   const [formData, setFormData] = useState({
     name_of_supply: '',
     asset_type: 'other',
     invoice_number: '',
     description: '',
-    quantity: 1,
     rate: 0,
     remark: '',
     allocated_lab: asset?.allocated_lab || '',
@@ -30,41 +29,65 @@ const AssetForm: React.FC<AssetFormProps> = ({ asset, onClose, onSave }) => {
 
   useEffect(() => {
     const fetchLabId = async () => {
+      if (asset && asset.allocated_lab) {
+        // Editing asset, keep its allocated_lab
+        setFormData(prev => ({
+          ...prev,
+          allocated_lab: asset.allocated_lab,
+        }));
+        return;
+      }
       if (profile?.lab_id) {
-  // fetchingLab removed
         try {
-            const lab = await LabService.getLabByIdentifier(profile.lab_id);
+          const lab = await LabService.getLabByIdentifier(profile.lab_id);
+          if (lab?.id) {
             setFormData(prev => ({
               ...prev,
-              allocated_lab: lab?.id || '',
+              allocated_lab: lab.id,
             }));
-          } catch (error: any) {
-            // Only log unexpected errors, not 'no rows' error
-            if (error.code !== 'PGRST116') {
-              console.error('Error fetching lab:', error);
-            }
-            // If we can't find the lab by identifier, try to get the first available lab
-            try {
-              const labs = await LabService.getLabs();
-              if (labs.length > 0) {
-                setFormData(prev => ({
-                  ...prev,
-                  allocated_lab: labs[0].id,
-                }));
-              }
-            } catch (fallbackError) {
-              console.error('Error fetching fallback labs:', fallbackError);
-            }
+          } else {
+            setFormData(prev => ({
+              ...prev,
+              allocated_lab: '', // No valid lab found, show 'Select Lab'
+            }));
           }
+        } catch (_error: unknown) {
+          setFormData(prev => ({
+            ...prev,
+            allocated_lab: '', // On error, show 'Select Lab'
+          }));
+        }
+      } else {
+        setFormData(prev => ({
+          ...prev,
+          allocated_lab: '', // No lab in profile, show 'Select Lab'
+        }));
       }
     };
 
     const fetchLabs = async () => {
       try {
         const labsData = await LabService.getLabs();
-        setLabOptions(labsData.map(lab => ({ id: lab.id, name: lab.name })));
-      } catch (error) {
-        console.error('Error fetching labs:', error);
+
+        // For Lab Assistants, only show their assigned lab
+        if (profile?.role === 'Lab Assistant' && profile?.lab_id) {
+          const userLab = labsData.find(
+            lab =>
+              lab.id === profile.lab_id ||
+              lab.lab_identifier === profile.lab_id ||
+              lab.name === profile.lab_id
+          );
+          if (userLab) {
+            setLabOptions([{ id: userLab.id, name: userLab.name }]);
+          } else {
+            setLabOptions([]);
+          }
+        } else {
+          // For other roles, show all labs
+          setLabOptions(labsData.map(lab => ({ id: lab.id, name: lab.name })));
+        }
+      } catch (_error) {
+        // console.error('Error fetching labs:', _error);
       }
     };
 
@@ -76,14 +99,13 @@ const AssetForm: React.FC<AssetFormProps> = ({ asset, onClose, onSave }) => {
         asset_type: asset.asset_type || 'other',
         invoice_number: asset.invoice_number || '',
         description: asset.description || '',
-        quantity: asset.quantity,
         rate: asset.rate,
         remark: asset.remark || '',
         allocated_lab: asset.allocated_lab,
         date: asset.date,
       });
     }
-  }, [asset, profile?.lab_id]);
+  }, [asset, profile?.lab_id, profile?.role]);
 
   const handleSubmit = useCallback(
     async (e: React.FormEvent) => {
@@ -133,15 +155,22 @@ const AssetForm: React.FC<AssetFormProps> = ({ asset, onClose, onSave }) => {
 
           // Create notification for all users about the creation
           if (profile?.id && savedAsset) {
-            // Notification is now only sent once for asset creation
           }
         }
 
         onSave();
         onClose();
       } catch (_error) {
-        console.error('Error saving asset:', _error);
-        alert('Error saving asset. Please try again. Check the console for details.');
+          console.error('Error saving asset:', _error);
+          let errorMessage = 'Error saving asset. Please try again.';
+          if (_error instanceof Error) {
+            errorMessage += `\n${_error.message}`;
+          } else if (typeof _error === 'string') {
+            errorMessage += `\n${_error}`;
+          } else if (_error && typeof _error === 'object' && 'message' in _error) {
+            errorMessage += `\n${(_error as any).message}`;
+          }
+          alert(errorMessage);
       } finally {
         setLoading(false);
       }
@@ -255,31 +284,20 @@ const AssetForm: React.FC<AssetFormProps> = ({ asset, onClose, onSave }) => {
                 className='w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent dark:bg-gray-700 dark:text-gray-200'
                 required
               >
-                <option value='' disabled>Select Lab</option>
+                <option value='' disabled>
+                  Select Lab
+                </option>
                 {labOptions.map(lab => (
-                  <option key={lab.id} value={lab.id}>{lab.name}</option>
+                  <option key={lab.id} value={lab.id}>
+                    {lab.name}
+                  </option>
                 ))}
               </select>
             </div>
 
             <div>
               <label className='block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1'>
-                Quantity *
-              </label>
-              <input
-                type='number'
-                name='quantity'
-                value={formData.quantity}
-                onChange={handleChange}
-                min='1'
-                className='w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent dark:bg-gray-700 dark:text-gray-200'
-                required
-              />
-            </div>
-
-            <div>
-              <label className='block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1'>
-                Rate (₹) *
+                Price (₹) *
               </label>
               <input
                 type='number'
@@ -307,24 +325,17 @@ const AssetForm: React.FC<AssetFormProps> = ({ asset, onClose, onSave }) => {
             />
           </div>
 
-
-            <div>
-              <label className='block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1'>
-                Remarks
-              </label>
-              <textarea
-                name='remark'
-                value={formData.remark}
-                onChange={handleChange}
-                rows={3}
-                className='w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent dark:bg-gray-700 dark:text-gray-200'
-              />
-            </div>
-
-          <div className='bg-blue-50 dark:bg-blue-900/30 p-4 rounded-lg'>
-            <p className='text-sm text-blue-700 dark:text-blue-300'>
-              <strong>Total Amount:</strong> ₹{(formData.quantity * formData.rate).toFixed(2)}
-            </p>
+          <div>
+            <label className='block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1'>
+              Remarks
+            </label>
+            <textarea
+              name='remark'
+              value={formData.remark}
+              onChange={handleChange}
+              rows={3}
+              className='w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent dark:bg-gray-700 dark:text-gray-200'
+            />
           </div>
 
           <div className='flex justify-end space-x-3 pt-4'>

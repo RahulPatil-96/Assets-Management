@@ -3,42 +3,7 @@ import { supabase } from '../lib/supabase';
 import { sendSupabasePing, shouldSendPing, PingResult } from '../lib/supabasePingService';
 import { LabService } from '../lib/labService';
 import { toast } from 'react-hot-toast';
-
-interface User {
-  id: string;
-  email: string;
-  // Add other user properties as needed
-}
-
-interface Profile {
-  id: string;
-  email: string;
-  lab_id: string;
-  role: 'HOD' | 'Lab Assistant' | 'Lab Incharge';
-  name: string;
-}
-
-interface PingStatus {
-  lastPing: string | null;
-  lastSuccess: string | null;
-  lastError: string | null;
-  isPinging: boolean;
-}
-
-interface AuthContextType {
-  user: User | null;
-  profile: Profile | null;
-  loading: boolean;
-  pingStatus: PingStatus;
-  signIn: (email: string, password: string, rememberMe?: boolean) => Promise<{ error: unknown }>;
-  signUp: (
-    email: string,
-    password: string,
-    metadata?: { name?: string; role?: string; labName?: string; lab_id?: string }
-  ) => Promise<{ error: unknown }>;
-  signOut: () => Promise<void>;
-  triggerPing: () => Promise<PingResult>;
-}
+import { AuthContextType, User, Profile, PingStatus } from '../types/auth';
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
 
@@ -66,13 +31,29 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
   });
   const pingIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
+  // Helper function to enrich profile with lab_name for Lab Assistant and Lab Incharge
+  const enrichProfileWithLabName = async (rawProfile: any): Promise<Profile> => {
+    const profile = rawProfile as Profile;
+    if ((profile.role === 'Lab Assistant' || profile.role === 'Lab Incharge') && profile.lab_id) {
+      try {
+        const lab = await LabService.getLab(profile.lab_id);
+        if (lab) {
+          profile.lab_name = lab.name;
+        }
+      } catch (error) {
+        // console.error('Error fetching lab name:', error);
+      }
+    }
+    return profile;
+  };
+
   useEffect(() => {
     let isMounted = true;
     let initialCleanupComplete = false;
 
     // Initialize auth state
     const initializeAuth = async () => {
-      console.log('🔄 Initializing auth state...');
+      // console.log('🔄 Initializing auth state...');
 
       // Check current auth state without signing out
       const {
@@ -87,7 +68,7 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
             email: session.user.email || '',
           });
 
-          console.log('🔍 Fetching user profile for auth_id:', session.user.id);
+          // console.log('🔍 Fetching user profile for auth_id:', session.user.id);
           const { data: profileData, error: profileError } = await supabase
             .from('user_profiles')
             .select('*')
@@ -95,22 +76,14 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
             .single();
 
           if (profileData) {
-            console.log('✅ Profile found:', {
-              id: profileData.id,
-              email: profileData.email,
-              role: profileData.role,
-              name: profileData.name,
-              lab_id: profileData.lab_id
-            });
-            console.log('🔍 Profile role:', profileData.role);
-            console.log('🔍 Profile name:', profileData.name);
-            setProfile(profileData as Profile);
+            const enrichedProfile = await enrichProfileWithLabName(profileData);
+            setProfile(enrichedProfile);
           } else if (profileError) {
-            console.log('❌ Error fetching profile:', profileError.message);
-            console.log('📋 Profile error details:', profileError);
+            // console.log('❌ Error fetching profile:', profileError.message);
+            // console.log('📋 Profile error details:', profileError);
           }
         } else {
-          console.log('⚠️ No active session found');
+          // console.log('⚠️ No active session found');
           setUser(null);
           setProfile(null);
         }
@@ -122,18 +95,12 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
     // Subscribe to auth state changes
     const {
       data: { subscription },
-    } = supabase.auth.onAuthStateChange(async (event, session) => {
-      console.log('🔄 Auth state change:', {
-        event,
-        hasSession: !!session,
-        accessToken: session?.access_token ? 'Token exists' : 'No token',
-      });
-
+    } = supabase.auth.onAuthStateChange(async (_event, session) => {
       if (!isMounted) return;
 
       // Skip processing events during initial cleanup
       if (!initialCleanupComplete) {
-        console.log('⏭️ Skipping auth state change during initial cleanup');
+        // console.log('⏭️ Skipping auth state change during initial cleanup');
         return;
       }
 
@@ -144,7 +111,7 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
         });
 
         // Check if user profile exists
-        console.log('🔍 Checking user profile for auth_id:', session.user.id);
+        // console.log('🔍 Checking user profile for auth_id:', session.user.id);
         const { data: profileData, error: profileError } = await supabase
           .from('user_profiles')
           .select('*')
@@ -152,24 +119,78 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
           .single();
 
         if (profileData) {
-          console.log('✅ Profile found during auth state change:', {
-            id: profileData.id,
-            email: profileData.email,
-            role: profileData.role,
-            name: profileData.name,
-            lab_id: profileData.lab_id
-          });
-          console.log('🔍 Profile role during auth state change:', profileData.role);
-          setProfile(profileData as Profile);
+          const enrichedProfile = await enrichProfileWithLabName(profileData);
+          setProfile(enrichedProfile);
         } else if (profileError && profileError.code === 'PGRST116') {
           // Profile doesn't exist, create it using the RPC function
-          console.log('📝 Creating user profile for new user');
+          // console.log('📝 Creating user profile for new user');
 
           // Get user metadata from auth user
           const userMetadata = session.user.user_metadata;
-          console.log('📋 User metadata:', userMetadata);
+          // console.log('📋 User metadata:', userMetadata);
 
-          try {
+          // Compute lab_id
+          const providedLabId = userMetadata?.lab_id;
+          let lab_id;
+          if (providedLabId && providedLabId !== '') {
+            lab_id = providedLabId;
+          } else if (userMetadata?.role === 'HOD') {
+            lab_id = null;
+          } else {
+            lab_id = await (async () => {
+              try {
+                const labs = await LabService.getLabs();
+                return labs[0]?.id || null;
+              } catch {
+                return null;
+              }
+            })();
+          }
+
+          // Check if profile with this email already exists
+          const { data: existingProfile, error: checkError } = await supabase
+            .from('user_profiles')
+            .select('*')
+            .eq('email', session.user.email || '')
+            .single();
+
+          let profileUpdated = false;
+          if (existingProfile && !checkError) {
+            // Validate and prepare the role
+            const validRoles = ['HOD', 'Lab Assistant', 'Lab Incharge'];
+            const newRole =
+              userMetadata?.role && validRoles.includes(userMetadata.role)
+                ? userMetadata.role
+                : existingProfile.role;
+
+            // Update the existing profile with the new auth_id and other metadata
+            const { data: updatedProfile, error: updateError } = await supabase
+              .from('user_profiles')
+              .update({
+                auth_id: session.user.id,
+                role: newRole as any,
+                name: userMetadata?.name || existingProfile.name,
+                lab_id:
+                  userMetadata?.lab_id && userMetadata.lab_id !== ''
+                    ? userMetadata.lab_id
+                    : existingProfile.lab_id,
+              })
+              .eq('id', existingProfile.id)
+              .select()
+              .single();
+
+            if (updatedProfile && !updateError) {
+              // console.log('✅ Existing user profile updated with new auth_id and metadata');
+              const enrichedProfile = await enrichProfileWithLabName(updatedProfile);
+              setProfile(enrichedProfile);
+              profileUpdated = true;
+            } else {
+              // console.log('❌ Failed to update existing profile:', updateError?.message);
+            }
+          }
+
+          if (!profileUpdated) {
+            try {
               const { data: _rpcResult, error: _rpcError } = await supabase.rpc(
                 'create_user_profile',
                 {
@@ -177,87 +198,115 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
                   p_email: session.user.email || '',
                   p_role: userMetadata?.role || 'Lab Assistant',
                   p_name: userMetadata?.name || '',
-                  p_lab_id: userMetadata?.lab_id || userMetadata?.labName || await (async () => {
-                    try {
-                      const labs = await LabService.getLabs();
-                      return labs[0]?.id || '';
-                    } catch {
-                      return '';
-                    }
-                  })(),
+                  p_lab_id: lab_id,
                 }
               );
 
-            console.log('📊 RPC call result:', { rpcResult: _rpcResult, rpcError: _rpcError });
+              // console.log('📊 RPC call result:', { rpcResult: _rpcResult, rpcError: _rpcError });
 
-            if (_rpcError) {
-              console.log('❌ Failed to create user profile via RPC:', _rpcError.message);
-              console.log('📋 RPC error details:', _rpcError);
+              if (_rpcError) {
+                // console.log('❌ Failed to create user profile via RPC:', _rpcError.message);
+                // console.log('📋 RPC error details:', _rpcError);
 
-              // Fallback: try direct insert with service role key
-              console.log('🔄 Trying direct insert as fallback...');
-              try {
-                const { data: directInsertResult, error: directError } = await supabase
-                  .from('user_profiles')
-                  .insert([
-                    {
-                      auth_id: session.user.id,
-                      email: session.user.email || '',
-                      role: (userMetadata?.role || 'Lab Assistant') as any,
-                      name: userMetadata?.name || '',
-                      lab_id: userMetadata?.labId || userMetadata?.lab_id || await (async () => {
-                        try {
-                          const labs = await LabService.getLabs();
-                          return labs[0]?.id || '';
-                        } catch {
-                          return '';
-                        }
-                      })(),
-                    },
-                  ])
-                  .select();
+                // Fallback: try direct insert with service role key
+                // console.log('🔄 Trying direct insert as fallback...');
+                try {
+                  // Check if profile with this email already exists
+                  const { data: existingProfile, error: checkError } = await supabase
+                    .from('user_profiles')
+                    .select('*')
+                    .eq('email', session.user.email || '')
+                    .single();
 
-                if (directError) {
-                  console.log('❌ Direct insert also failed:', directError.message);
-                } else if (directInsertResult && directInsertResult.length > 0) {
-                  console.log('✅ User profile created via direct insert');
-                  setProfile(directInsertResult[0] as Profile);
+                  if (existingProfile && !checkError) {
+                    // Validate and prepare the role
+                    const validRoles = ['HOD', 'Lab Assistant', 'Lab Incharge'];
+                    const newRole =
+                      userMetadata?.role && validRoles.includes(userMetadata.role)
+                        ? userMetadata.role
+                        : existingProfile.role;
+
+                    // Update the existing profile with the new auth_id and other metadata
+                    const { data: updatedProfile, error: updateError } = await supabase
+                      .from('user_profiles')
+                      .update({
+                        auth_id: session.user.id,
+                        role: newRole as any,
+                        name: userMetadata?.name || existingProfile.name,
+                        lab_id:
+                          userMetadata?.lab_id && userMetadata.lab_id !== ''
+                            ? userMetadata.lab_id
+                            : existingProfile.lab_id,
+                      })
+                      .eq('id', existingProfile.id)
+                      .select()
+                      .single();
+
+                    if (updatedProfile && !updateError) {
+                      const enrichedProfile = await enrichProfileWithLabName(updatedProfile);
+                      setProfile(enrichedProfile);
+                    } else {
+                    }
+                  } else {
+                    // No existing profile, proceed with insert
+                    const { data: directInsertResult, error: directError } = await supabase
+                      .from('user_profiles')
+                      .insert([
+                        {
+                          auth_id: session.user.id,
+                          email: session.user.email || '',
+                          role: (userMetadata?.role || 'Lab Assistant') as any,
+                          name: userMetadata?.name || '',
+                          lab_id,
+                        },
+                      ])
+                      .select();
+
+                    if (directError) {
+                      // console.log('❌ Direct insert also failed:', directError.message);
+                    } else if (directInsertResult && directInsertResult.length > 0) {
+                      // console.log('✅ User profile created via direct insert');
+                      const enrichedProfile = await enrichProfileWithLabName(directInsertResult[0]);
+                      setProfile(enrichedProfile);
+                    }
+                  }
+                } catch (_directError) {
+                  // console.log('❌ Error in direct insert fallback:', _directError);
                 }
-              } catch (_directError) {
-                console.log('❌ Error in direct insert fallback:', _directError);
+              } else {
+                // console.log('✅ User profile created successfully, profile ID:', _rpcResult);
+
+                // Fetch the newly created profile
+                const { data: newProfile, error: fetchError } = await supabase
+                  .from('user_profiles')
+                  .select('*')
+                  .eq('auth_id', session.user.id)
+                  .single();
+
+                // console.log('📊 Profile fetch result:', { newProfile, fetchError });
+
+                if (newProfile) {
+                  const enrichedProfile = await enrichProfileWithLabName(newProfile);
+                  setProfile(enrichedProfile);
+                } else if (fetchError) {
+                  // console.log('❌ Error fetching created profile:', fetchError.message);
+                }
               }
-            } else {
-              console.log('✅ User profile created successfully, profile ID:', _rpcResult);
-
-              // Fetch the newly created profile
-              const { data: newProfile, error: fetchError } = await supabase
-                .from('user_profiles')
-                .select('*')
-                .eq('auth_id', session.user.id)
-                .single();
-
-              console.log('📊 Profile fetch result:', { newProfile, fetchError });
-
-              if (newProfile) {
-                setProfile(newProfile as Profile);
-              } else if (fetchError) {
-                console.log('❌ Error fetching created profile:', fetchError.message);
-              }
+            } catch (_rpcError) {
+              // console.log('❌ Error creating user profile:', _rpcError);
             }
-          } catch (_rpcError) {
-            console.log('❌ Error creating user profile:', _rpcError);
+          } else if (profileError) {
+            // console.log('❌ Error fetching user profile:', profileError.message);
+            // console.log('📋 Profile error details:', profileError);
           }
-        } else if (profileError) {
-          console.log('❌ Error fetching user profile:', profileError.message);
-          console.log('📋 Profile error details:', profileError);
+        } else {
+          // console.log('⚠️ No session found - clearing user and profile');
+          setUser(null);
+          setProfile(null);
         }
-      } else {
-        console.log('⚠️ No session found - clearing user and profile');
-        setUser(null);
-        setProfile(null);
-      }
 
-      setLoading(false);
+        setLoading(false);
+      }
     });
 
     // Initialize auth state on mount
@@ -345,7 +394,7 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
         isPinging: false,
       }));
 
-      console.error('❌ Supabase ping failed:', error);
+      // console.error('❌ Supabase ping failed:', error);
       return {
         success: false,
         timestamp,
@@ -359,7 +408,6 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
     password: string,
     rememberMe: boolean = false
   ): Promise<{ error: unknown }> => {
-
     // Set session persistence based on remember me option
     const { data, error } = await supabase.auth.signInWithPassword({
       email,
@@ -367,12 +415,6 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
     });
 
     if (data?.session) {
-      // console.log('✅ Sign-in successful - token generated:', {
-      //   userId: data.session.user.id,
-      //   accessToken: data.session.access_token ? 'Token exists' : 'No token',
-      //   persistSession: rememberMe,
-      // });
-
       // If remember me is false, we need to handle session persistence manually
       if (!rememberMe) {
         // For non-persistent sessions, we might need additional handling
@@ -385,11 +427,11 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
     return { error };
   };
 
-const signUp = async (
-  email: string,
-  password: string,
-  metadata?: { name?: string; role?: string; labName?: string; lab_id?: string }
-): Promise<{ error: unknown }> => {
+  const signUp = async (
+    email: string,
+    password: string,
+    metadata?: { name?: string; role?: string; lab_id?: string }
+  ): Promise<{ error: unknown }> => {
     const { data, error } = await supabase.auth.signUp({
       email,
       password,
@@ -404,8 +446,6 @@ const signUp = async (
         duration: 5000,
         position: 'top-right',
       });
-      // Don't try to create profile immediately - wait for email confirmation
-      // The profile will be created when the user confirms their email and signs in
     }
 
     return { error };
@@ -442,6 +482,32 @@ const signUp = async (
     }
   };
 
+  // Function to update user's lab_id in profile
+  const updateUserLab = async (newLabId: string): Promise<boolean> => {
+    if (!user) return false;
+    try {
+      const { data, error } = await supabase
+        .from('user_profiles')
+        .update({ lab_id: newLabId })
+        .eq('auth_id', user.id)
+        .select()
+        .single();
+      if (error) {
+        // console.error('Error updating user lab:', error);
+        return false;
+      }
+      if (data) {
+        const enrichedProfile = await enrichProfileWithLabName(data);
+        setProfile(enrichedProfile);
+        return true;
+      }
+      return false;
+    } catch (err) {
+      // console.error('Exception updating user lab:', err);
+      return false;
+    }
+  };
+
   const value = {
     user,
     profile,
@@ -451,6 +517,7 @@ const signUp = async (
     signUp,
     signOut,
     triggerPing,
+    updateUserLab,
   };
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;

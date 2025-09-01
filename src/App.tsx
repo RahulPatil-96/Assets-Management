@@ -11,13 +11,13 @@ import Navbar from './components/Layout/Navbar';
 import Sidebar from './components/Layout/Sidebar';
 import { Toaster } from 'react-hot-toast';
 import { Lab } from './types/lab';
-import LabTable from './components/Labs/LabTable';
 
 // Lazy load components for better performance
 const Dashboard = lazy(() => import('./components/Dashboard/Dashboard'));
 const AssetList = lazy(() => import('./components/Assets/AssetList'));
 const IssueList = lazy(() => import('./components/Issues/IssueList'));
 const TransferList = lazy(() => import('./components/Transfers/TransferList'));
+const LabManagementPage = lazy(() => import('./components/Labs/LabManagementPage'));
 
 const MainApp: React.FC = () => {
   const [_labs, _setLabs] = useState<Lab[]>([]); // State for labs
@@ -28,17 +28,6 @@ const MainApp: React.FC = () => {
   const handleSearch = (term: string) => {
     setSearchTerm(term);
   };
-
-  // const fetchLabs = async () => {
-  //   if (profile && profile.role === 'HOD') {
-  //     try {
-  //       const fetchedLabs = await LabService.getLabs();
-  //       setLabs(fetchedLabs);
-  //     } catch (_error) {
-  //       // console.error('Error fetching labs:', _error);
-  //     }
-  //   }
-  // };
 
   if (loading) {
     return (
@@ -123,6 +112,12 @@ const MainApp: React.FC = () => {
             <Dashboard />
           </Suspense>
         );
+      case 'lab-management':
+        return (
+          <Suspense fallback={<LoadingFallback />}>
+            <LabManagementPage />
+          </Suspense>
+        );
       case 'settings':
         return (
           <div className='p-6'>
@@ -147,20 +142,14 @@ const MainApp: React.FC = () => {
                   </div>
                   <div>
                     <label className='block text-sm font-medium text-gray-700 dark:text-gray-300'>
-                      Lab ID
+                      Lab
                     </label>
-                    <p className='mt-1 text-sm text-gray-900 dark:text-white'>{profile.lab_id}</p>
+                    <p className='mt-1 text-sm text-gray-900 dark:text-white'>
+                      {(profile as any).lab_name || profile.lab_id}
+                    </p>
                   </div>
                 </div>
               </div>
-              {profile.role === 'HOD' && (
-                <div className='bg-white dark:bg-gray-800 rounded-lg shadow-sm border border-gray-200 dark:border-gray-700 p-6'>
-                  <h2 className='text-lg font-semibold text-gray-900 dark:text-white mb-4'>
-                    Lab Management
-                  </h2>
-                  <LabTable />
-                </div>
-              )}
             </div>
           </div>
         );
@@ -174,11 +163,13 @@ const MainApp: React.FC = () => {
   };
 
   return (
-    <div className='min-h-screen bg-gray-100 dark:bg-gray-900'>
-      <Navbar onSearch={handleSearch} />
+    <div className='min-h-screen bg-gray-100 dark:bg-gray-900 w-full max-w-full overflow-x-hidden'>
+      <Navbar onSearch={handleSearch} setActiveTab={setActiveTab} />
       <div className='flex'>
         <Sidebar activeTab={activeTab} setActiveTab={setActiveTab} />
-        <div className='flex-1 overflow-auto'>{renderContent()}</div>
+        <div className='flex-1 overflow-y-auto overflow-x-hidden max-w-screen-xl mx-auto'>
+          {renderContent()}
+        </div>
       </div>
     </div>
   );

@@ -29,7 +29,7 @@ export const sendSupabasePing = async (): Promise<PingResult> => {
     const responseTime = Date.now() - startTime;
 
     if (error) {
-      console.warn('Supabase ping failed:', error.message);
+      // console.warn('Supabase ping failed:', error.message);
       return {
         success: false,
         timestamp: new Date().toISOString(),
@@ -38,7 +38,7 @@ export const sendSupabasePing = async (): Promise<PingResult> => {
       };
     }
 
-    console.log(`✅ Supabase ping successful. Response time: ${responseTime}ms`);
+    // console.log(`✅ Supabase ping successful. Response time: ${responseTime}ms`);
     return {
       success: true,
       timestamp: new Date().toISOString(),
@@ -48,7 +48,7 @@ export const sendSupabasePing = async (): Promise<PingResult> => {
     const responseTime = Date.now() - startTime;
     const errorMessage = error instanceof Error ? error.message : 'Unknown error';
 
-    console.error('Supabase ping error:', error);
+    // console.error('Supabase ping error:', error);
     return {
       success: false,
       timestamp: new Date().toISOString(),

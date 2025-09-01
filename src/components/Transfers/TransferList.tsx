@@ -1,27 +1,35 @@
 import React, { useState, useCallback } from 'react';
 import { useQuery } from '@tanstack/react-query';
-import { ArrowRightLeft, Plus, CheckCircle, Clock, User, Eye } from 'lucide-react';
+import { ArrowRightLeft, Plus, CheckCircle, Clock, Eye, Trash2 } from 'lucide-react';
 import { useAuth } from '../../contexts/AuthContext';
 import { supabase, AssetTransfer } from '../../lib/supabase';
 import TransferForm from './TransferForm';
 import TransferDetailsModalWithErrorBoundary from './TransferDetailsModalWithErrorBoundary';
+import { ListItemSkeleton } from '../Layout/LoadingSkeleton';
+import Button from '../Button';
+import ConfirmationModal from '../Layout/ConfirmationModal';
 
-const TransferListComponent: React.FC<{ searchTerm: string }> = ({
-  searchTerm: propSearchTerm,
-}) => {
+const TransferListComponent: React.FC<{ searchTerm: string }> = ({ searchTerm: propSearchTerm }) => {
   const { profile } = useAuth();
   const [showForm, setShowForm] = useState(false);
   const [viewingTransfer, setViewingTransfer] = useState<AssetTransfer | null>(null);
+  const [showDeleteModal, setShowDeleteModal] = useState(false);
+  const [transferToDelete, setTransferToDelete] = useState<AssetTransfer | null>(null);
+  const [isDeleting, setIsDeleting] = useState(false);
 
   const fetchTransfers = async (): Promise<AssetTransfer[]> => {
     const { data, error } = await supabase
       .from('asset_transfers')
-      .select(`
+      .select(
+        `
         *,
-        asset:assets(name_of_supply, sr_no),
+        asset:assets(name_of_supply, sr_no, asset_id),
         initiator:initiated_by(name, role),
-        receiver:received_by(name, role)
-      `)
+        receiver:received_by(name, role),
+        from_lab_data:from_lab(name, lab_identifier),
+        to_lab_data:to_lab(name, lab_identifier)
+      `
+      )
       .order('initiated_at', { ascending: false });
 
     if (error) throw error;
@@ -57,6 +65,34 @@ const TransferListComponent: React.FC<{ searchTerm: string }> = ({
     [profile?.id, refetch]
   );
 
+  const handleDelete = useCallback(
+    async () => {
+      if (!transferToDelete) return;
+      setIsDeleting(true);
+      try {
+        const { error } = await supabase
+          .from('asset_transfers')
+          .delete()
+          .eq('id', transferToDelete.id);
+
+        if (error) throw error;
+        setShowDeleteModal(false);
+        setTransferToDelete(null);
+        refetch();
+      } catch (_error) {
+        // console.error('Error deleting transfer:', _error);
+      } finally {
+        setIsDeleting(false);
+      }
+    },
+    [transferToDelete, refetch]
+  );
+
+  const cancelDelete = () => {
+    setShowDeleteModal(false);
+    setTransferToDelete(null);
+  };
+
   const getStatusColor = (status: string) =>
     status === 'received' ? 'text-green-600' : 'text-orange-600';
 
@@ -67,49 +103,59 @@ const TransferListComponent: React.FC<{ searchTerm: string }> = ({
   }, []);
 
   const canReceive = useCallback(
-    (transfer: AssetTransfer) =>
-      profile?.role === 'Lab Incharge' &&
-      transfer.status === 'pending' &&
-      transfer.to_lab === profile?.lab_id,
-    [profile?.role, profile?.lab_id]
+    (transfer: AssetTransfer) => {
+      if (!profile?.lab_id || transfer.status !== 'pending') return false;
+      if (profile.role !== 'Lab Incharge') return false;
+
+      const matchesByName = transfer.to_lab_data?.name === profile.lab_id;
+      const matchesById = transfer.to_lab === profile.lab_id;
+
+      return matchesByName || matchesById;
+    },
+    [profile?.lab_id, profile?.role]
   );
 
-  const filteredTransfers = transfers.filter(transfer => {
-    const matchesSearch =
-      propSearchTerm === '' ||
-      transfer.asset?.name_of_supply?.toLowerCase().includes(propSearchTerm.toLowerCase()) ||
-      (transfer.asset?.sr_no &&
-        transfer.asset.sr_no.toString().toLowerCase().includes(propSearchTerm.toLowerCase())) ||
-      transfer.from_lab?.toLowerCase().includes(propSearchTerm.toLowerCase()) ||
-      transfer.to_lab?.toLowerCase().includes(propSearchTerm.toLowerCase());
-    return matchesSearch;
-  });
+  const canDelete = useCallback(
+    (transfer: AssetTransfer) =>
+      profile?.role === 'Lab Incharge' && transfer.status === 'pending',
+    [profile?.role]
+  );
+
+  const filteredTransfers = transfers
+    .filter(transfer => {
+      const matchesSearch =
+        propSearchTerm === '' ||
+        (transfer.asset?.asset_id &&
+          transfer.asset.asset_id.toString().toLowerCase().includes(propSearchTerm.toLowerCase()));
+      return matchesSearch;
+    })
+    .sort((a, b) => {
+      if (a.status === 'pending' && b.status === 'received') return -1;
+      if (a.status === 'received' && b.status === 'pending') return 1;
+      return new Date(b.initiated_at).getTime() - new Date(a.initiated_at).getTime();
+    });
 
   if (isLoading) {
     return (
       <div className='p-4 sm:p-6'>
         <div className='animate-pulse'>
           <div className='h-8 bg-gray-200 dark:bg-gray-700 rounded w-1/3 sm:w-1/4 mb-4 sm:mb-6'></div>
-          <div className='space-y-4'>
-            {[1, 2, 3].map(i => (
-              <div key={i} className='h-24 bg-gray-200 dark:bg-gray-700 rounded'></div>
-            ))}
-          </div>
+          <ListItemSkeleton count={3} className='h-24' />
         </div>
       </div>
     );
   }
 
   return (
-    <div className='p-4 sm:p-6'>
-      <div className='flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 mb-6'>
-        <h1 className='text-xl sm:text-2xl font-bold text-gray-900 dark:text-gray-100'>
+    <div className='p-4 sm:p-6 overflow-x-auto'>
+      <div className='flex flex-col sm:flex-row justify-between items-center mb-6'>
+        <h1 className='text-2xl font-bold text-gray-900 dark:text-gray-100 mb-4 sm:mb-0'>
           Asset Transfers
         </h1>
         {profile?.role === 'Lab Incharge' && (
           <button
             onClick={() => setShowForm(true)}
-            className='bg-purple-600 text-white px-4 py-2 rounded-lg hover:bg-purple-700 dark:bg-purple-700 dark:hover:bg-purple-800 flex items-center space-x-2 transition-colors w-full sm:w-auto'
+            className='bg-purple-600 text-white px-4 py-2 rounded-lg hover:bg-purple-700 dark:bg-purple-700 dark:hover:bg-purple-800 flex items-center space-x-2 transition-colors'
           >
             <Plus className='w-4 h-4' />
             <span>Initiate Transfer</span>
@@ -117,95 +163,122 @@ const TransferListComponent: React.FC<{ searchTerm: string }> = ({
         )}
       </div>
 
-      {/* Transfers List */}
-      <div className='space-y-4'>
+      <div className='bg-white dark:bg-gray-800 rounded-lg shadow-sm border border-gray-200 dark:border-gray-700'>
         {filteredTransfers.length === 0 ? (
-          <div className='text-center py-12 bg-white dark:bg-gray-800 rounded-lg shadow-sm border border-gray-200 dark:border-gray-700'>
+          <div className='text-center py-12'>
             <ArrowRightLeft className='w-12 h-12 text-gray-300 dark:text-gray-600 mx-auto mb-4' />
-            <p className='text-gray-500 dark:text-gray-400'>No transfers found</p>
+            <p className='text-gray-500 dark:text-gray-300'>No transfers found</p>
           </div>
         ) : (
-          filteredTransfers.map(transfer => {
-            const StatusIcon = getStatusIcon(transfer.status);
-            return (
-              <div
-                key={transfer.id}
-                className='bg-white dark:bg-gray-800 rounded-lg shadow-sm border border-gray-200 dark:border-gray-700 p-4 sm:p-6'
-              >
-                <div className='flex flex-col sm:flex-row items-start justify-between gap-4'>
-                  <div className='flex-1'>
-                    <div className='flex flex-wrap items-center gap-2 mb-2'>
-                      <StatusIcon className={`w-5 h-5 ${getStatusColor(transfer.status)}`} />
-                      <span className={`font-medium ${getStatusColor(transfer.status)}`}>
-                        {transfer.status === 'received' ? 'Completed' : 'Pending'}
-                      </span>
-                      <span className='text-gray-400 dark:text-gray-500 hidden sm:inline'>•</span>
-                      <span className='text-sm text-gray-500 dark:text-gray-400'>
+          <div className='overflow-x-auto max-w-full'>
+            <table className='w-full'>
+              <thead className='bg-gray-50 dark:bg-gray-700 border-b border-gray-200 dark:border-gray-600'>
+                <tr>
+                  <th className='px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-300 uppercase tracking-wider'>
+                    Sr No
+                  </th>
+                  <th className='px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-300 uppercase tracking-wider'>
+                    Asset ID
+                  </th>
+                  <th className='px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-300 uppercase tracking-wider'>
+                    Asset
+                  </th>
+                  <th className='px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-300 uppercase tracking-wider'>
+                    From Lab
+                  </th>
+                  <th className='px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-300 uppercase tracking-wider'>
+                    To Lab
+                  </th>
+                  <th className='px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-300 uppercase tracking-wider'>
+                    Status
+                  </th>
+                  <th className='px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-300 uppercase tracking-wider'>
+                    Initiated By
+                  </th>
+                  <th className='px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-300 uppercase tracking-wider'>
+                    Initiated At
+                  </th>
+                  <th className='px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-300 uppercase tracking-wider'>
+                    Actions
+                  </th>
+                </tr>
+              </thead>
+              <tbody>
+                {filteredTransfers.map((transfer, index) => {
+                  const StatusIcon = getStatusIcon(transfer.status);
+                  return (
+                    <tr key={transfer.id} className='border-b border-gray-200 dark:border-gray-600'>
+                      <td className='px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900 dark:text-gray-100'>
+                        {index + 1}
+                      </td>
+                      <td className='px-6 py-4 text-sm font-medium text-gray-900 dark:text-gray-100 max-w-xs '>
+                        {transfer.asset?.asset_id || 'Pending...'}
+                      </td>
+                      <td className='px-6 py-4 text-sm font-medium text-gray-900 dark:text-gray-100 max-w-xs '>
+                        {transfer.asset?.name_of_supply || 'N/A'}
+                      </td>
+                      <td className='px-6 py-4 text-sm font-medium text-gray-900 dark:text-gray-100 max-w-xs '>
+                        {transfer.from_lab_data?.name || transfer.from_lab}
+                      </td>
+                      <td className='px-6 py-4 text-sm font-medium text-gray-900 dark:text-gray-100 max-w-xs '>
+                        {transfer.to_lab_data?.name || transfer.to_lab}
+                      </td>
+                      <td className='px-6 py-4 whitespace-nowrap text-sm'>
+                        <div className='flex items-center space-x-2'>
+                          <StatusIcon className={`w-4 h-4 ${getStatusColor(transfer.status)}`} />
+                          <span className={getStatusColor(transfer.status)}>
+                            {transfer.status === 'received' ? 'Completed' : 'Pending'}
+                          </span>
+                        </div>
+                      </td>
+                      <td className='px-6 py-4 text-sm text-gray-900 dark:text-gray-100 max-w-xs '>
+                        {transfer.initiator?.name || ''}
+                      </td>
+                      <td className='px-6 py-4 whitespace-nowrap text-sm text-gray-500 dark:text-gray-400'>
                         {new Date(transfer.initiated_at).toLocaleDateString()}
-                      </span>
-                    </div>
+                      </td>
+                      <td className='px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-500 dark:text-gray-400'>
+                        <div className='flex space-x-2'>
+                          <Button
+                            onClick={() => handleViewDetails(transfer)}
+                            variant='view'
+                            size='sm'
+                            className='p-1'
+                            icon={<Eye className='w-5 h-5' />} children={undefined}                          />
 
-                    <h3 className='font-semibold text-gray-900 dark:text-gray-100 mb-2 text-sm sm:text-base'>
-                      Asset: {transfer.asset?.name_of_supply} (SR: {transfer.asset?.sr_no})
-                    </h3>
+                          {canDelete(transfer) && (
+                            <Button
+                              onClick={() => {
+                                setTransferToDelete(transfer);
+                                setShowDeleteModal(true);
+                              } }
+                              variant='trash'
+                              size='sm'
+                              className='p-1'
+                              icon={<Trash2 className='w-5 h-5' />} children={undefined}                            />
+                          )}
 
-                    <div className='flex flex-wrap items-center gap-2 mb-3'>
-                      <span className='bg-blue-100 dark:bg-blue-900 text-blue-800 dark:text-blue-200 px-2 py-1 rounded text-xs sm:text-sm font-medium'>
-                        From: {transfer.from_lab}
-                      </span>
-                      <ArrowRightLeft className='w-4 h-4 text-gray-400 dark:text-gray-500' />
-                      <span className='bg-green-100 dark:bg-green-900 text-green-800 dark:text-green-200 px-2 py-1 rounded text-xs sm:text-sm font-medium'>
-                        To: {transfer.to_lab}
-                      </span>
-                    </div>
+                          {canReceive(transfer) && (
+                            <Button
+                              onClick={() => handleReceive(transfer.id)}
+                              variant='success'
+                              size='sm'
+                            >
+                              Received
+                            </Button>
+                          )}
+                        </div>
 
-                    <div className='flex flex-col sm:flex-row sm:items-center gap-2 sm:gap-4 text-xs sm:text-sm text-gray-500 dark:text-gray-400'>
-                      <div className='flex items-center space-x-1'>
-                        <User className='w-3 h-3 sm:w-4 sm:h-4' />
-                        <span>Initiated by: {transfer.initiator?.name || ''}</span>
-                      </div>
-                      {transfer.receiver && (
-                        <span className='hidden sm:inline'>
-                          Received by: {transfer.receiver.name || ''}
-                        </span>
-                      )}
-                      {transfer.received_by && !transfer.receiver && (
-                        <span className='hidden sm:inline'>Received by: </span>
-                      )}
-                      {transfer.received_at && (
-                        <span className='hidden sm:inline'>
-                          on {new Date(transfer.received_at).toLocaleDateString()}
-                        </span>
-                      )}
-                    </div>
-                  </div>
-
-                  <div className='flex sm:flex-col space-x-2 sm:space-x-0 sm:space-y-2 self-end sm:self-auto'>
-                    <button
-                      onClick={() => handleViewDetails(transfer)}
-                      className='text-gray-600 dark:text-gray-400 hover:text-gray-800 dark:hover:text-gray-300 p-1'
-                      title='View Details'
-                      aria-label={`View details for transfer of ${transfer.asset?.name_of_supply}`}
-                    >
-                      <Eye className='w-4 h-4 sm:w-5 sm:h-5' />
-                    </button>
-                    {canReceive(transfer) && (
-                      <button
-                        onClick={() => handleReceive(transfer.id)}
-                        className='bg-green-600 text-white px-2 py-1 sm:px-3 sm:py-1.5 rounded text-xs sm:text-sm hover:bg-green-700 dark:bg-green-700 dark:hover:bg-green-800 transition-colors whitespace-nowrap'
-                      >
-                        Confirm Receipt
-                      </button>
-                    )}
-                  </div>
-                </div>
-              </div>
-            );
-          })
+                      </td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+          </div>
         )}
       </div>
 
-      {/* Transfer Form Modal */}
       {showForm && <TransferForm onClose={() => setShowForm(false)} onSave={refetch} />}
 
       {viewingTransfer && (
@@ -214,6 +287,19 @@ const TransferListComponent: React.FC<{ searchTerm: string }> = ({
           onClose={() => setViewingTransfer(null)}
         />
       )}
+
+      <ConfirmationModal
+        isOpen={showDeleteModal}
+        onClose={cancelDelete}
+        onConfirm={handleDelete}
+        title='Delete Transfer'
+        message='Are you sure you want to delete this transfer? This action cannot be undone.'
+        confirmText='Delete'
+        cancelText='Cancel'
+        type='delete'
+        isLoading={isDeleting}
+        destructive={true}
+      />
     </div>
   );
 };

@@ -13,7 +13,15 @@ class NotificationSoundService {
    */
   private initAudioContext(): AudioContext {
     if (!this.audioContext) {
-      this.audioContext = new (window.AudioContext || (window as any).webkitAudioContext)();
+      // Handle browser-specific AudioContext implementations
+      const AudioContextClass =
+        window.AudioContext ||
+        (window as unknown as { webkitAudioContext?: typeof AudioContext }).webkitAudioContext;
+      if (AudioContextClass) {
+        this.audioContext = new AudioContextClass();
+      } else {
+        throw new Error('AudioContext is not supported in this browser');
+      }
     }
     return this.audioContext;
   }
@@ -41,8 +49,8 @@ class NotificationSoundService {
 
       oscillator.start();
       oscillator.stop(context.currentTime + 0.3);
-    } catch (error) {
-      console.warn('Failed to play notification sound:', error);
+    } catch (_error) {
+      // console.warn('Failed to play notification sound:', error);
     }
   }
 
@@ -55,8 +63,8 @@ class NotificationSoundService {
     try {
       // Short vibration pattern: vibrate for 200ms, pause for 100ms, vibrate for 200ms
       navigator.vibrate([200, 100, 200]);
-    } catch (error) {
-      console.warn('Failed to trigger vibration:', error);
+    } catch (_error) {
+      // console.warn('Failed to trigger vibration:', error);
     }
   }
 

@@ -1,18 +1,15 @@
-import { Asset, AssetIssue } from './supabase';
+import { Asset, AssetIssue, supabase } from './supabase';
 import { AnalyticsService } from './analyticsService';
 import { PDFExportService } from './pdfExportService';
 import { ExcelExportService } from './excelExportService';
-import { supabase } from './supabase';
 
 export class ExportService {
   static async exportAssets(assets: Asset[], format: 'pdf' | 'excel', fileName?: string) {
     const analytics = AnalyticsService.analyzeAssets(assets);
-    
+
     // Fetch lab data for mapping lab IDs to lab names
-    const { data: labsData, error } = await supabase
-      .from('labs')
-      .select('id, name');
-    
+    const { data: labsData, error } = await supabase.from('labs').select('id, name');
+
     const labs: { [id: string]: string } = {};
     if (!error && labsData) {
       labsData.forEach(lab => {
@@ -27,14 +24,17 @@ export class ExportService {
     }
   }
 
-  static async exportIssues(issues: AssetIssue[], format: 'pdf' | 'excel', fileName?: string, labs?: { [id: string]: string }) {
+  static async exportIssues(
+    issues: AssetIssue[],
+    format: 'pdf' | 'excel',
+    fileName?: string,
+    labs?: { [id: string]: string }
+  ) {
     // If labs mapping is not provided, fetch it
     let labMapping = labs;
     if (!labMapping) {
-      const { data: labsData, error } = await supabase
-        .from('labs')
-        .select('id, name');
-      
+      const { data: labsData, error } = await supabase.from('labs').select('id, name');
+
       const fetchedLabMapping: { [id: string]: string } = {};
       if (!error && labsData) {
         labsData.forEach(lab => {

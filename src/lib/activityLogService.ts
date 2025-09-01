@@ -1,4 +1,12 @@
 import { supabase } from './supabase';
+import {
+  ActivityLogValues,
+  ActivityLogMetadata,
+  ActivityLogSummary,
+  AssetData,
+  IssueData,
+  TransferData,
+} from '../types/activityLog';
 
 export interface ActivityLog {
   id: string;
@@ -7,9 +15,9 @@ export interface ActivityLog {
   entity_type: string;
   entity_id?: string;
   entity_name?: string;
-  old_values?: any;
-  new_values?: any;
-  changes?: any;
+  old_values?: ActivityLogValues;
+  new_values?: ActivityLogValues;
+  changes?: ActivityLogValues;
   ip_address?: string;
   user_agent?: string;
   session_id?: string;
@@ -18,7 +26,7 @@ export interface ActivityLog {
   success: boolean;
   error_message?: string;
   processing_time_ms?: number;
-  metadata?: any;
+  metadata?: ActivityLogMetadata;
   created_at: string;
 }
 
@@ -50,12 +58,12 @@ export class ActivityLogService {
     entityType: string,
     entityId?: string,
     entityName?: string,
-    oldValues?: any,
-    newValues?: any,
+    oldValues?: ActivityLogValues,
+    newValues?: ActivityLogValues,
     severityLevel: 'info' | 'warning' | 'error' | 'critical' = 'info',
     success: boolean = true,
     errorMessage?: string,
-    metadata?: any
+    metadata?: ActivityLogMetadata
   ): Promise<string> {
     const { data, error } = await supabase.rpc('log_activity', {
       p_action_type: actionType,
@@ -81,12 +89,12 @@ export class ActivityLogService {
       entityType: string;
       entityId?: string;
       entityName?: string;
-      oldValues?: any;
-      newValues?: any;
+      oldValues?: ActivityLogValues;
+      newValues?: ActivityLogValues;
       severityLevel?: 'info' | 'warning' | 'error' | 'critical';
       success?: boolean;
       errorMessage?: string;
-      metadata?: any;
+      metadata?: ActivityLogMetadata;
     }>
   ): Promise<number> {
     const logs = activities.map(activity => ({
@@ -111,7 +119,7 @@ export class ActivityLogService {
   // Get activity logs with filters
   static async getActivityLogs(filters: ActivityLogFilters = {}): Promise<ActivityLog[]> {
     let query = supabase
-      .from('enhanced_activity_logs')
+      .from('activity_logs')
       .select('*')
       .order('created_at', { ascending: false });
 
@@ -153,7 +161,10 @@ export class ActivityLogService {
   }
 
   // Get activity logs summary view
-  static async getActivityLogsSummary(limit: number = 50, offset: number = 0): Promise<any[]> {
+  static async getActivityLogsSummary(
+    limit: number = 50,
+    offset: number = 0
+  ): Promise<ActivityLogSummary[]> {
     const { data, error } = await supabase
       .from('activity_logs_summary')
       .select('*')
@@ -183,7 +194,7 @@ export class ActivityLogService {
     offset: number = 0
   ): Promise<ActivityLog[]> {
     const { data, error } = await supabase
-      .from('enhanced_activity_logs')
+      .from('activity_logs')
       .select('*')
       .eq('entity_type', entityType)
       .eq('entity_id', entityId)
@@ -266,7 +277,7 @@ export class ActivityLogService {
   static async logAssetCreation(
     assetId: string,
     assetName: string,
-    assetData: any
+    assetData: AssetData
   ): Promise<string> {
     return this.logActivity(
       'create',
@@ -286,8 +297,8 @@ export class ActivityLogService {
   static async logAssetUpdate(
     assetId: string,
     assetName: string,
-    oldData: any,
-    newData: any
+    oldData: AssetData,
+    newData: AssetData
   ): Promise<string> {
     return this.logActivity(
       'update',
@@ -307,7 +318,7 @@ export class ActivityLogService {
   static async logAssetDeletion(
     assetId: string,
     assetName: string,
-    assetData: any
+    assetData: AssetData
   ): Promise<string> {
     return this.logActivity(
       'delete',
@@ -324,7 +335,11 @@ export class ActivityLogService {
   }
 
   // Log issue creation
-  static async logIssueCreation(issueId: string, assetId: string, issueData: any): Promise<string> {
+  static async logIssueCreation(
+    issueId: string,
+    assetId: string,
+    issueData: IssueData
+  ): Promise<string> {
     return this.logActivity(
       'create',
       'issue',
@@ -346,7 +361,7 @@ export class ActivityLogService {
   static async logTransferCreation(
     transferId: string,
     assetId: string,
-    transferData: any
+    transferData: TransferData
   ): Promise<string> {
     return this.logActivity(
       'create',
@@ -372,7 +387,7 @@ export class ActivityLogService {
     errorMessage: string,
     entityId?: string,
     entityName?: string,
-    metadata?: any
+    metadata?: ActivityLogMetadata
   ): Promise<string> {
     return this.logActivity(
       actionType,
@@ -395,7 +410,7 @@ export class ActivityLogService {
     warningMessage: string,
     entityId?: string,
     entityName?: string,
-    metadata?: any
+    metadata?: ActivityLogMetadata
   ): Promise<string> {
     return this.logActivity(
       actionType,
@@ -424,7 +439,7 @@ export class ActivityLogService {
   // Search activity logs
   static async searchActivityLogs(searchTerm: string, limit: number = 20): Promise<ActivityLog[]> {
     const { data, error } = await supabase
-      .from('enhanced_activity_logs')
+      .from('activity_logs')
       .select('*')
       .or(
         `entity_name.ilike.%${searchTerm}%,error_message.ilike.%${searchTerm}%,metadata->>description.ilike.%${searchTerm}%`

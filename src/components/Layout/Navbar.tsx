@@ -1,16 +1,27 @@
-import React, { useState } from 'react';
-import { LogOut, User, Search, Settings, Package, Moon, Sun } from 'lucide-react';
+import React, { useState, useEffect } from 'react';
+import { useNavigate } from 'react-router-dom';
+import { LogOut, User, Search, Settings, Package, Moon, Sun, ChevronDown } from 'lucide-react';
 import NotificationBell from '../Notifications/NotificationBell';
 import { useAuth } from '../../contexts/AuthContext';
 import { useTheme } from '../../contexts/ThemeContext';
+import { LabService } from '../../lib/labService';
 
-const Navbar: React.FC<{ onSearch: (term: string) => void }> = ({ onSearch }) => {
+const Navbar: React.FC<{
+  onSearch: (term: string) => void;
+  setActiveTab: (tab: string) => void;
+}> = ({ onSearch, setActiveTab }) => {
   // Extend profile type to accept lab_name
-  const { profile, signOut } = useAuth();
+  const { profile, signOut, updateUserLab } = useAuth();
   const profileWithLabName = profile as typeof profile & { lab_name?: string };
   const { theme, toggleTheme } = useTheme();
+  const navigate = useNavigate();
   const [searchTerm, setSearchTerm] = useState('');
   const [isProfileDropdownOpen, setIsProfileDropdownOpen] = useState(false);
+  const [isChangeLabOpen, setIsChangeLabOpen] = useState(false);
+  const [labs, setLabs] = useState<Array<{ id: string; name: string }>>([]);
+  const [selectedLabId, setSelectedLabId] = useState<string | null>(null);
+  const [isUpdatingLab, setIsUpdatingLab] = useState(false);
+  const [updateError, setUpdateError] = useState<string | null>(null);
 
   const handleSearchChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const term = e.target.value;
@@ -31,8 +42,37 @@ const Navbar: React.FC<{ onSearch: (term: string) => void }> = ({ onSearch }) =>
     }
   };
 
+  useEffect(() => {
+    if (
+      (profile?.role === 'Lab Assistant' || profile?.role === 'Lab Incharge') &&
+      isChangeLabOpen
+    ) {
+      LabService.getLabs()
+        .then(fetchedLabs => {
+          setLabs(fetchedLabs);
+        })
+        .catch(() => {
+          setLabs([]);
+        });
+    }
+  }, [isChangeLabOpen, profile?.role]);
+
+  const handleLabSelect = async (labId: string) => {
+    setSelectedLabId(labId);
+    setIsUpdatingLab(true);
+    setUpdateError(null);
+    const success = await updateUserLab(labId);
+    setIsUpdatingLab(false);
+    if (success) {
+      setIsChangeLabOpen(false);
+      setIsProfileDropdownOpen(false);
+    } else {
+      setUpdateError('Failed to update lab. Please try again.');
+    }
+  };
+
   return (
-    <nav className='bg-white dark:bg-gray-800/10 border-b border-gray-200 dark:border-gray-700 px-6 py-4 shadow-sm'>
+    <nav className='bg-white/10 dark:bg-gray-800 border-b border-gray-200 dark:border-gray-700 px-6 py-4 shadow-sm'>
       <div className='flex flex-col md:flex-row md:justify-between md:items-center space-y-4 md:space-y-0'>
         {/* Brand / Logo */}
         <div className='flex items-center space-x-3 md:space-x-4'>
@@ -69,13 +109,13 @@ const Navbar: React.FC<{ onSearch: (term: string) => void }> = ({ onSearch }) =>
           {/* Theme Toggle */}
           <button
             onClick={toggleTheme}
-            className='p-2 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-700 transition-colors duration-200'
+            className='p-2 rounded-lg hover:bg-gray-300 dark:hover:bg-gray-700 transition-colors duration-200'
             aria-label={`Switch to ${theme === 'light' ? 'dark' : 'light'} mode`}
           >
             {theme === 'light' ? (
-              <Moon className='w-5 h-5 text-gray-600 dark:text-gray-300' />
+              <Moon className='w-5 h-5 text-gray-600 dark:text-gray-300 hover:text-gray-900 dark:hover:text-white ' />
             ) : (
-              <Sun className='w-5 h-5 text-gray-600 dark:text-gray-300' />
+              <Sun className='w-5 h-5 text-gray-600 dark:text-gray-300 hover:text-gray-900 dark:hover:text-white' />
             )}
           </button>
 
@@ -124,17 +164,60 @@ const Navbar: React.FC<{ onSearch: (term: string) => void }> = ({ onSearch }) =>
                 <button
                   onClick={() => {
                     setIsProfileDropdownOpen(false);
-                    // Navigate to settings (would need routing implementation)
+                    setActiveTab('settings');
                   }}
                   className='flex items-center space-x-2 w-full px-4 py-3 text-sm text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-700 transition-colors duration-150'
                 >
                   <Settings className='w-4 h-4' />
                   <span>Settings</span>
                 </button>
+                {/* Change Lab option for Lab Assistant and Lab Incharge */}
+                {(profile?.role === 'Lab Assistant' || profile?.role === 'Lab Incharge') && (
+                  <div>
+                    <button
+                      onClick={() => setIsChangeLabOpen(!isChangeLabOpen)}
+                      className='flex items-center justify-between w-full px-4 py-3 text-sm text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-700 transition-colors duration-150'
+                    >
+                      <span>Change Lab</span>
+                      <ChevronDown
+                        className={`w-4 h-4 transition-transform duration-200 ${isChangeLabOpen ? 'rotate-180' : ''}`}
+                      />
+                    </button>
+                    {isChangeLabOpen && (
+                      <div className='max-h-48 overflow-y-auto border-t border-gray-200 dark:border-gray-700'>
+                        {labs.length === 0 && (
+                          <p className='px-4 py-2 text-xs text-gray-500 dark:text-gray-400'>
+                            No labs available
+                          </p>
+                        )}
+                        {labs.map(lab => (
+                          <button
+                            key={lab.id}
+                            onClick={() => handleLabSelect(lab.id)}
+                            disabled={isUpdatingLab}
+                            className={`block w-full text-left px-4 py-2 text-sm hover:bg-gray-100 dark:hover:bg-gray-700 transition-colors duration-150 ${
+                              selectedLabId === lab.id
+                                ? 'font-semibold text-blue-600'
+                                : 'text-gray-700 dark:text-gray-300'
+                            }`}
+                          >
+                            {lab.name}
+                          </button>
+                        ))}
+                        {updateError && (
+                          <p className='px-4 py-2 text-xs text-red-600 dark:text-red-400'>
+                            {updateError}
+                          </p>
+                        )}
+                      </div>
+                    )}
+                  </div>
+                )}
                 <button
-                  onClick={() => {
+                  onClick={async () => {
                     setIsProfileDropdownOpen(false);
-                    signOut();
+                    await signOut();
+                    navigate('/signin');
                   }}
                   className='flex items-center space-x-2 w-full px-4 py-3 text-sm text-red-600 dark:text-red-400 hover:bg-red-50 dark:hover:bg-red-900/30 transition-colors duration-150'
                 >

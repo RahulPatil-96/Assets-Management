@@ -10,6 +10,7 @@ import {
 } from 'lucide-react';
 import { useAuth } from '../../contexts/AuthContext';
 import { supabase, Asset, AssetIssue } from '../../lib/supabase';
+import { ActivityLogService, ActivityLog } from '../../lib/activityLogService';
 import AssetAnalyticsDashboard from '../Analytics/AssetAnalyticsDashboard';
 import IssueAnalyticsDashboard from '../Analytics/IssueAnalyticsDashboard';
 
@@ -19,7 +20,7 @@ interface DashboardStats {
   pendingIssues: number;
   pendingTransfers: number;
   pendingApprovals: number;
-  recentActivities: unknown[]; // Change to unknown for better type safety
+  recentActivities: ActivityLog[]; // Use ActivityLog type for recent activities
 }
 
 interface DashboardProps {
@@ -46,13 +47,16 @@ const Dashboard: React.FC<DashboardProps> = ({ onNavigate }) => {
       .select('id')
       .eq('status', 'pending');
 
+    // Fetch recent activities
+    const recentActivities = await ActivityLogService.getRecentActivity(5);
+
     return {
       totalAssets: assets?.length || 0,
       approvedAssets: assets?.filter(a => a.approved).length || 0,
       pendingIssues: issues?.length || 0,
       pendingTransfers: transfers?.length || 0,
       pendingApprovals: assets?.filter(a => !a.approved).length || 0,
-      recentActivities: [],
+      recentActivities,
     };
   };
 
@@ -64,12 +68,10 @@ const Dashboard: React.FC<DashboardProps> = ({ onNavigate }) => {
 
   // Fetch labs for mapping
   const fetchLabs = async (): Promise<void> => {
-    const { data: labsData, error: labsError } = await supabase
-      .from('labs')
-      .select('id, name');
+    const { data: labsData, error: labsError } = await supabase.from('labs').select('id, name');
 
     if (labsError) throw labsError;
-    
+
     const newLabMap = new Map<string, string>();
     (labsData || []).forEach((lab: { id: string; name: string }) => {
       newLabMap.set(lab.id, lab.name);
@@ -81,7 +83,7 @@ const Dashboard: React.FC<DashboardProps> = ({ onNavigate }) => {
   const fetchAssets = async (): Promise<Asset[]> => {
     // Fetch labs first
     await fetchLabs();
-    
+
     // console.log('Fetching assets for analytics...');
     const { data, error } = await supabase
       .from('assets')
@@ -107,7 +109,7 @@ const Dashboard: React.FC<DashboardProps> = ({ onNavigate }) => {
   const fetchIssues = async (): Promise<AssetIssue[]> => {
     // Fetch labs first
     await fetchLabs();
-    
+
     // console.log('Fetching issues for analytics...');
     const { data, error } = await supabase
       .from('asset_issues')
@@ -306,7 +308,7 @@ const Dashboard: React.FC<DashboardProps> = ({ onNavigate }) => {
                 Quick Actions
               </h2>
               <div className='space-y-3'>
-                {profile?.role === 'Lab Assistant' && (
+                {profile?.role === 'Lab Assistant' && profile?.lab_id && (
                   <>
                     <button
                       onClick={() => onNavigate?.('assets')}
@@ -365,18 +367,48 @@ const Dashboard: React.FC<DashboardProps> = ({ onNavigate }) => {
               <h2 className='text-lg font-semibold text-gray-900 dark:text-gray-100 mb-4'>
                 Recent Activity
               </h2>
-              <div className='text-center text-gray-500 dark:text-gray-400 py-8'>
-                <Clock className='w-12 h-12 mx-auto mb-4 text-gray-300 dark:text-gray-600' />
-                <p>No recent activity</p>
-              </div>
+              {stats?.recentActivities && stats.recentActivities.length > 0 ? (
+                <div className='max-h-64 overflow-y-auto space-y-3'>
+                  {stats.recentActivities.map(activity => (
+                    <div
+                      key={activity.id}
+                      className='flex items-start space-x-3 p-3 rounded-lg bg-gray-50 dark:bg-gray-700/50'
+                    >
+                      <div className='flex-shrink-0'>
+                        <Clock className='w-5 h-5 text-gray-400 dark:text-gray-500' />
+                      </div>
+                      <div className='flex-1 min-w-0'>
+                        <p className='text-sm font-medium text-gray-900 dark:text-gray-100'>
+                          {activity.action_type} {activity.entity_type}
+                        </p>
+                        <p className='text-sm text-gray-600 dark:text-gray-400'>
+                          {activity.entity_name || 'Unknown'}
+                        </p>
+                        <p className='text-xs text-gray-500 dark:text-gray-500'>
+                          {new Date(activity.created_at).toLocaleString()}
+                        </p>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              ) : (
+                <div className='text-center text-gray-500 dark:text-gray-400 py-8'>
+                  <Clock className='w-12 h-12 mx-auto mb-4 text-gray-300 dark:text-gray-600' />
+                  <p>No recent activity</p>
+                </div>
+              )}
             </div>
           </div>
         </>
       )}
 
-      {activeTab === 'assetAnalytics' && <AssetAnalyticsDashboard assets={assets} labs={Object.fromEntries(labMap)} />}
+      {activeTab === 'assetAnalytics' && (
+        <AssetAnalyticsDashboard assets={assets} labs={Object.fromEntries(labMap)} />
+      )}
 
-      {activeTab === 'issueAnalytics' && <IssueAnalyticsDashboard issues={issues} labs={Object.fromEntries(labMap)} />}
+      {activeTab === 'issueAnalytics' && (
+        <IssueAnalyticsDashboard issues={issues} labs={Object.fromEntries(labMap)} />
+      )}
     </div>
   );
 };

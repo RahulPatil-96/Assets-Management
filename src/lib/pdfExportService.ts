@@ -46,17 +46,10 @@ const addHeader = (doc: jsPDF, title: string) => {
 
 const addFooter = (doc: jsPDF, pageNumber: number) => {
   doc.setFontSize(FONTS.small);
-  doc.text('© Asset Management System - Confidential', 105, 290, {
+  doc.text('© Asset Management System - CSBS Department', 105, 290, {
     align: 'center',
   });
   doc.text(`Page ${pageNumber}`, 200, 290, { align: 'right' });
-};
-
-const addWatermark = (doc: jsPDF) => {
-  doc.setTextColor(COLORS.watermark[0], COLORS.watermark[1], COLORS.watermark[2]);
-  doc.setFontSize(60);
-  doc.text('CONFIDENTIAL', 105, 150, { align: 'center', angle: 45 });
-  doc.setTextColor(0, 0, 0);
 };
 
 const handlePageBreak = (doc: jsPDFAutoTable, yPos: number): number => {
@@ -71,7 +64,6 @@ const handlePageBreak = (doc: jsPDFAutoTable, yPos: number): number => {
 export class PDFExportService {
   private static getDoc(): jsPDFAutoTable {
     const doc = new jsPDF() as jsPDFAutoTable;
-    addWatermark(doc);
     return doc;
   }
 
@@ -92,7 +84,6 @@ export class PDFExportService {
 
     const summaryData: RowInput[] = [
       ['Total Assets', analytics.totalAssets.toString()],
-      ['Total Quantity', analytics.totalQuantity.toString()],
       ['Total Cost', `Rs.${analytics.totalCost.toLocaleString()}`],
       ['Approved Assets', analytics.approvedAssets.toString()],
       ['Pending Approval', analytics.pendingAssets.toString()],
@@ -121,9 +112,7 @@ export class PDFExportService {
         asset.name_of_supply,
         asset.asset_type,
         labs[asset.allocated_lab] || asset.allocated_lab,
-        asset.quantity.toString(),
         `Rs.${asset.rate.toLocaleString()}`,
-        `Rs.${(asset.quantity * asset.rate).toLocaleString()}`,
         {
           content: asset.approved ? 'Approved' : 'Pending',
           styles: { textColor: [statusColor[0], statusColor[1], statusColor[2]] },
@@ -134,7 +123,7 @@ export class PDFExportService {
 
     autoTable(doc, {
       startY: currentY + 20,
-      head: [['Asset ID', 'Name', 'Type', 'Lab', 'Qty', 'Rate', 'Total', 'Status', 'Created']],
+      head: [['Asset ID', 'Name', 'Type', 'Lab', 'Price', 'Status', 'Created']],
       body: assetsData,
       theme: 'grid',
       headStyles: { fillColor: [COLORS.primary[0], COLORS.primary[1], COLORS.primary[2]] },
@@ -172,7 +161,7 @@ export class PDFExportService {
 
     yPos += 5;
     yPos = handlePageBreak(doc, yPos);
-    
+
     // Distribution by Type
     doc.text('Distribution by Type:', 20, yPos);
     yPos += 7;
@@ -184,11 +173,11 @@ export class PDFExportService {
 
     yPos += 5;
     yPos = handlePageBreak(doc, yPos);
-    
+
     // Cost Analysis Table
     doc.text('Cost Analysis:', 20, yPos);
     yPos += 7;
-    
+
     const costData: [string, number][] = [
       ['Total Cost', analytics.totalCost],
       ['Average Cost per Asset', analytics.totalCost / analytics.totalAssets],
@@ -224,15 +213,7 @@ export class PDFExportService {
       ['Open Issues', analytics.openIssues.toString()],
       ['Resolved Issues', analytics.resolvedIssues.toString()],
       ['Resolution Rate', `${analytics.resolutionRate.toFixed(1)}%`],
-      [
-        'Estimated Repair Cost',
-        `Rs.${analytics.costAnalysis.estimatedRepairCost.toLocaleString()}`,
-      ],
-      [
-        'Potential Replacement Cost',
-        `Rs.${analytics.costAnalysis.replacementCost.toLocaleString()}`,
-      ],
-      ['Total Potential Cost', `Rs.${analytics.costAnalysis.totalPotentialCost.toLocaleString()}`],
+      ['Total Repair Cost', `Rs.${analytics.costAnalysis.totalRepairCost.toLocaleString()}`],
     ];
 
     autoTable(doc, {
@@ -252,18 +233,21 @@ export class PDFExportService {
 
     const issuesData: RowInput[] = issues.map(issue => [
       issue.asset?.name_of_supply || 'Unknown',
-      issue.asset?.allocated_lab ? (labs[issue.asset.allocated_lab] || issue.asset.allocated_lab) : 'Unknown',
+      issue.asset?.allocated_lab
+        ? labs[issue.asset.allocated_lab] || issue.asset.allocated_lab
+        : 'Unknown',
       issue.issue_description.length > 50
         ? `${issue.issue_description.substring(0, 50)}...`
         : issue.issue_description,
       issue.status,
       new Date(issue.reported_at).toLocaleDateString(),
       issue.resolved_at ? new Date(issue.resolved_at).toLocaleDateString() : '-',
+      issue.cost_required ? `Rs.${issue.cost_required.toLocaleString()}` : '-',
     ]);
 
     autoTable(doc, {
       startY: currentY + 20,
-      head: [['Asset', 'Lab', 'Description', 'Status', 'Reported', 'Resolved']],
+      head: [['Asset', 'Lab', 'Description', 'Status', 'Reported', 'Resolved', 'Repair Cost']],
       body: issuesData,
       theme: 'grid',
       headStyles: { fillColor: [COLORS.danger[0], COLORS.danger[1], COLORS.danger[2]] },
@@ -291,15 +275,13 @@ export class PDFExportService {
 
     yPos += 5;
     yPos = handlePageBreak(doc, yPos);
-    
-    // Cost Analysis
+
+    // Cost Analysis Section
     doc.text('Cost Analysis:', 20, yPos);
     yPos += 7;
-    
+
     const costData: [string, number][] = [
-      ['Estimated Repair Cost', analytics.costAnalysis.estimatedRepairCost],
-      ['Replacement Cost', analytics.costAnalysis.replacementCost],
-      ['Total Potential Cost', analytics.costAnalysis.totalPotentialCost],
+      ['Total Repair Cost', analytics.costAnalysis.totalRepairCost],
     ];
 
     costData.forEach(([label, value]) => {

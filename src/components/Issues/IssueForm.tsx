@@ -31,7 +31,7 @@ const IssueForm: React.FC<IssueFormProps> = ({ onClose, onSave }) => {
     try {
       const { data, error } = await supabase
         .from('labs')
-        .select('id, name, description, location, lab_identifier, incharge_id, created_at, updated_at');
+        .select('id, name, description, location, lab_identifier, created_at, updated_at');
       if (error) throw error;
       setLabs(data || []);
     } catch (_error) {
@@ -63,7 +63,6 @@ const IssueForm: React.FC<IssueFormProps> = ({ onClose, onSave }) => {
         .from('asset_issues')
         .insert({
           ...formData,
-          lab_id: selectedLab,
           reported_by: profile?.id,
         })
         .select()
@@ -93,13 +92,16 @@ const IssueForm: React.FC<IssueFormProps> = ({ onClose, onSave }) => {
   };
 
   const filteredAssets = assets.filter(asset => {
+    const labName = labs.find(l => l.id === asset.allocated_lab)?.name || '';
     const matchesSearchTerm =
       asset.name_of_supply.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      asset.allocated_lab.toLowerCase().includes(searchTerm.toLowerCase()) ||
+      labName.toLowerCase().includes(searchTerm.toLowerCase()) ||
       asset.sr_no.toString().toLowerCase().includes(searchTerm.toLowerCase()) ||
       (asset.asset_id && asset.asset_id.toLowerCase().includes(searchTerm.toLowerCase()));
 
-    const matchesSelectedLab = selectedLab ? asset.allocated_lab === selectedLab : true;
+    const matchesSelectedLab = selectedLab
+      ? labs.find(l => l.name === selectedLab)?.id === asset.allocated_lab
+      : true;
 
     return matchesSearchTerm && matchesSelectedLab;
   });
@@ -132,7 +134,7 @@ const IssueForm: React.FC<IssueFormProps> = ({ onClose, onSave }) => {
             >
               <option value=''>Select a lab</option>
               {labs.map(lab => (
-                <option key={lab.id} value={lab.id}>
+                <option key={lab.id} value={lab.name}>
                   {lab.name}
                 </option>
               ))}
@@ -178,7 +180,8 @@ const IssueForm: React.FC<IssueFormProps> = ({ onClose, onSave }) => {
                         {asset.name_of_supply}
                       </p>
                       <p className='text-sm text-gray-500 dark:text-gray-400'>
-                        SR: {asset.sr_no} • Lab: {labs.find(l => l.id === asset.allocated_lab)?.name || asset.allocated_lab}
+                        SR: {asset.sr_no} • Lab:{' '}
+                        {labs.find(l => l.id === asset.allocated_lab)?.name || asset.allocated_lab}
                       </p>
                       {asset.asset_id && (
                         <p className='text-xs text-gray-400 dark:text-gray-500'>

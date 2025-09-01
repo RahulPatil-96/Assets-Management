@@ -104,11 +104,15 @@ const IssueDetailsModal: React.FC<IssueDetailsModalProps> = ({ issue, onClose })
               </h3>
               <div className='space-y-1'>
                 <p className='text-sm'>
+                  <span className='font-medium'>Asset ID:</span> {issue.asset?.asset_id || 'N/A'}
+                </p>
+                <p className='text-sm'>
                   <span className='font-medium'>Asset Name:</span>{' '}
                   {issue.asset?.name_of_supply || 'N/A'}
                 </p>
                 <p className='text-sm'>
-                  <span className='font-medium'>Lab:</span> {issue.lab_name || issue.asset?.allocated_lab || 'N/A'}
+                  <span className='font-medium'>Lab:</span>{' '}
+                  {issue.lab_name || issue.asset?.allocated_lab || 'N/A'}
                 </p>
               </div>
             </div>
