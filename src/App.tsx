@@ -24,9 +24,19 @@ const MainApp: React.FC = () => {
   const [searchTerm, setSearchTerm] = useState('');
   const { user, profile, loading } = useAuth();
   const [activeTab, setActiveTab] = useState('dashboard');
+  const [isSidebarOpen, setIsSidebarOpen] = useState(false);
 
   const handleSearch = (term: string) => {
     setSearchTerm(term);
+  };
+
+  const handleSetActiveTab = (tab: string) => {
+    setActiveTab(tab);
+    setIsSidebarOpen(false); // Close sidebar on mobile when selecting tab
+  };
+
+  const toggleSidebar = () => {
+    setIsSidebarOpen(!isSidebarOpen);
   };
 
   if (loading) {
@@ -164,10 +174,10 @@ const MainApp: React.FC = () => {
 
   return (
     <div className='min-h-screen bg-gray-100 dark:bg-gray-900 w-full max-w-full overflow-x-hidden'>
-      <Navbar onSearch={handleSearch} setActiveTab={setActiveTab} />
+      <Navbar onSearch={handleSearch} setActiveTab={handleSetActiveTab} toggleSidebar={toggleSidebar} activeTab={activeTab} />
       <div className='flex'>
-        <Sidebar activeTab={activeTab} setActiveTab={setActiveTab} />
-        <div className='flex-1 overflow-y-auto overflow-x-hidden max-w-screen-xl mx-auto'>
+        <Sidebar activeTab={activeTab} setActiveTab={handleSetActiveTab} isOpen={isSidebarOpen} />
+        <div className='flex-1 h-screen overflow-y-auto overflow-x-hidden max-w-screen-xl mx-auto'>
           {renderContent()}
         </div>
       </div>

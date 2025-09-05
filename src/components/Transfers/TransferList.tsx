@@ -153,17 +153,17 @@ const TransferListComponent: React.FC<{ searchTerm: string }> = ({ searchTerm: p
           Asset Transfers
         </h1>
         {profile?.role === 'Lab Incharge' && (
-          <button
+          <Button
             onClick={() => setShowForm(true)}
-            className='bg-purple-600 text-white px-4 py-2 rounded-lg hover:bg-purple-700 dark:bg-purple-700 dark:hover:bg-purple-800 flex items-center space-x-2 transition-colors'
+            variant="view" // or "primary" if you want blue; using "view" here for purple theme
+            icon={<Plus className="w-4 h-4" />}
           >
-            <Plus className='w-4 h-4' />
-            <span>Initiate Transfer</span>
-          </button>
+            Initiate Transfer
+          </Button>
         )}
       </div>
 
-      <div className='bg-white dark:bg-gray-800 rounded-lg shadow-sm border border-gray-200 dark:border-gray-700'>
+      <div className='bg-white dark:bg-gray-800 rounded-lg shadow-sm border border-gray-200 dark:border-gray-700 max-h-[calc(100vh-200px)] overflow-y-auto'>
         {filteredTransfers.length === 0 ? (
           <div className='text-center py-12'>
             <ArrowRightLeft className='w-12 h-12 text-gray-300 dark:text-gray-600 mx-auto mb-4' />
@@ -244,18 +244,18 @@ const TransferListComponent: React.FC<{ searchTerm: string }> = ({ searchTerm: p
                             variant='view'
                             size='sm'
                             className='p-1'
-                            icon={<Eye className='w-5 h-5' />} children={undefined}                          />
+                            icon={<Eye className='w-5 h-5' />} children={undefined} />
 
                           {canDelete(transfer) && (
                             <Button
                               onClick={() => {
                                 setTransferToDelete(transfer);
                                 setShowDeleteModal(true);
-                              } }
+                              }}
                               variant='trash'
                               size='sm'
                               className='p-1'
-                              icon={<Trash2 className='w-5 h-5' />} children={undefined}                            />
+                              icon={<Trash2 className='w-5 h-5' />} children={undefined} />
                           )}
 
                           {canReceive(transfer) && (

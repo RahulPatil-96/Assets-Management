@@ -1,4 +1,4 @@
-import React, { useState, FormEvent } from 'react';
+import { useState, FormEvent } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Button } from '../Button';
 import { Input } from '../Input';
@@ -139,11 +139,12 @@ export function UpdatePassword() {
 
             <Button
               variant='gradient'
-              text='Update Password'
               fullWidth={true}
               loading={loading}
               className='mt-6 shadow-lg hover:shadow-indigo-500/20'
-            />
+            >
+              Update Password
+            </Button>
           </form>
         </div>
       </div>

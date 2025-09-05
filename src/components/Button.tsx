@@ -9,18 +9,7 @@ export interface ButtonProps {
   /** The type of button */
   type?: 'button' | 'submit' | 'reset';
   /** The variant of the button */
-  variant?:
-    | 'primary'
-    | 'secondary'
-    | 'danger'
-    | 'success'
-    | 'warning'
-    | 'ghost'
-    | 'trash'
-    | 'view'
-    | 'edit'
-    | 'approve'
-    | 'gradient';
+  variant?: | 'primary' | 'secondary' | 'danger' | 'success' | 'warning' | 'ghost' | 'trash' | 'view' | 'edit' | 'approve' | 'gradient' | 'card';
   /** The size of the button */
   size?: 'sm' | 'md' | 'lg';
   /** Whether the button is disabled */
@@ -61,26 +50,19 @@ export const Button: React.FC<ButtonProps> = ({
 
     // Variant classes
     const variantClasses: Record<string, string> = {
-      primary:
-        'bg-blue-600 text-white hover:bg-blue-700 focus:ring-2 focus:ring-blue-500 dark:bg-blue-500 dark:hover:bg-blue-600 dark:focus:ring-blue-400',
-      gradient:
-        'bg-gradient-to-r from-indigo-500 to-purple-600 text-white hover:from-indigo-600 hover:to-purple-700 dark:from-indigo-600 dark:to-purple-700 dark:hover:from-indigo-700 dark:hover:to-purple-800 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-indigo-600 transition duration-200 ease-in-out',
-      secondary:
-        'bg-gray-200 text-gray-900 hover:bg-gray-300 focus:ring-2 focus:ring-gray-400 dark:bg-gray-800 dark:text-gray-100 dark:hover:bg-gray-700 dark:focus:ring-gray-600',
-      danger:
-        'bg-red-600 text-white hover:bg-red-700 focus:ring-2 focus:ring-red-500 dark:bg-red-500 dark:hover:bg-red-600 dark:focus:ring-red-400',
-      success:
-        'bg-green-600 text-white hover:bg-green-700 focus:ring-2 focus:ring-green-500 dark:bg-green-500 dark:hover:bg-green-600 dark:focus:ring-green-400',
-      warning:
-        'bg-yellow-500 text-black hover:bg-yellow-600 focus:ring-2 focus:ring-yellow-400 dark:bg-yellow-400 dark:text-gray-900 dark:hover:bg-yellow-500 dark:focus:ring-yellow-300',
-      trash:
-        'bg-transparent text-red-700 hover:bg-red-100 focus:ring-2 focus:ring-red-400 dark:text-red-300 dark:hover:bg-red-700 dark:focus:ring-red-600',
+      primary: 'bg-blue-600 text-white hover:bg-blue-700 focus:ring-2 focus:ring-blue-500 dark:bg-blue-500 dark:hover:bg-blue-600 dark:focus:ring-blue-400',
+      gradient: 'bg-gradient-to-r from-indigo-500 to-purple-600 text-white hover:from-indigo-600 hover:to-purple-700 dark:from-indigo-600 dark:to-purple-700 dark:hover:from-indigo-700 dark:hover:to-purple-800 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-indigo-600 transition duration-200 ease-in-out',
+      secondary: 'bg-gray-200 text-gray-900 hover:bg-gray-300 focus:ring-2 focus:ring-gray-400 dark:bg-gray-800 dark:text-gray-100 dark:hover:bg-gray-700 dark:focus:ring-gray-600',
+      danger: 'bg-red-600 text-white hover:bg-red-700 focus:ring-2 focus:ring-red-500 dark:bg-red-500 dark:hover:bg-red-600 dark:focus:ring-red-400',
+      success: 'bg-green-600 text-white hover:bg-green-700 focus:ring-2 focus:ring-green-500 dark:bg-green-500 dark:hover:bg-green-600 dark:focus:ring-green-400',
+      warning: 'bg-yellow-500 text-black hover:bg-yellow-600 focus:ring-2 focus:ring-yellow-400 dark:bg-yellow-400 dark:text-gray-900 dark:hover:bg-yellow-500 dark:focus:ring-yellow-300',
+      trash: 'bg-transparent text-red-700 hover:bg-red-100 focus:ring-2 focus:ring-red-400 dark:text-red-300 dark:hover:bg-red-700 dark:focus:ring-red-600',
       edit: 'bg-transparent text-blue-700 hover:bg-blue-100 focus:ring-2 focus:ring-blue-400 dark:text-blue-300 dark:hover:bg-blue-700 dark:focus:ring-blue-600',
-      approve:
-        'bg-transparent text-green-700 hover:bg-green-100 focus:ring-2 focus:ring-green-400 dark:text-green-300 dark:hover:bg-green-700 dark:focus:ring-green-600',
+      approve: 'bg-transparent text-green-700 hover:bg-green-100 focus:ring-2 focus:ring-green-400 dark:text-green-300 dark:hover:bg-green-700 dark:focus:ring-green-600',
       view: 'bg-transparent text-purple-700 hover:bg-purple-100 focus:ring-2 focus:ring-purple-400 dark:text-purple-300 dark:hover:bg-purple-700 dark:focus:ring-purple-600',
-      ghost:
-        'bg-transparent text-gray-700 hover:bg-gray-100 focus:ring-2 focus:ring-gray-400 dark:text-gray-300 dark:hover:bg-gray-700 dark:focus:ring-gray-600',
+      ghost: 'bg-transparent text-gray-700 hover:bg-gray-100 focus:ring-2 focus:ring-gray-400 dark:text-gray-300 dark:hover:bg-gray-700 dark:focus:ring-gray-600',
+      card: 'border border-gray-200 dark:border-gray-600 bg-white hover:bg-gray-50 dark:bg-gray-800 dark:hover:bg-gray-700 text-left shadow-sm',
+
     };
 
     // Size classes

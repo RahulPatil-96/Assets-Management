@@ -9,8 +9,6 @@ import {
   CheckCircle,
   Eye,
   BarChart3,
-  ChevronLeft,
-  ChevronRight,
 } from 'lucide-react';
 import { useAuth } from '../../contexts/AuthContext';
 import { supabase, Asset } from '../../lib/supabase';
@@ -35,8 +33,7 @@ const AssetList: React.FC<{ searchTerm: string }> = ({ searchTerm }) => {
   const [viewingAsset, setViewingAsset] = useState<Asset | null>(null);
   const [activeTab, setActiveTab] = useState<'list' | 'analytics'>('list');
   const [labMap, setLabMap] = useState<Map<string, string>>(new Map());
-  const [currentPage, setCurrentPage] = useState(1);
-  const [itemsPerPage, setItemsPerPage] = useState(20);
+
   const [showDeleteModal, setShowDeleteModal] = useState(false);
   const [assetToDelete, setAssetToDelete] = useState<string | null>(null);
   const [isDeleting, setIsDeleting] = useState(false);
@@ -46,16 +43,12 @@ const AssetList: React.FC<{ searchTerm: string }> = ({ searchTerm }) => {
   const [isBulkDeleting, setIsBulkDeleting] = useState(false);
   const [showBulkApproveModal, setShowBulkApproveModal] = useState(false);
   const [isBulkApproving, setIsBulkApproving] = useState(false);
-
+  
   type AssetWithLabName = Asset & { lab_name: string };
   const fetchAssets = async (): Promise<{ assets: AssetWithLabName[]; totalCount: number }> => {
-    // Calculate pagination range
-    const from = (currentPage - 1) * itemsPerPage;
-    const to = from + itemsPerPage - 1;
-
-    // Fetch assets with pagination and labs in parallel
+    // Fetch all assets and labs in parallel
     const [
-      { data: assetsData, error: assetsError, count: totalCount },
+      { data: assetsData, error: assetsError },
       { data: labsData, error: labsError },
     ] = await Promise.all([
       supabase
@@ -64,8 +57,7 @@ const AssetList: React.FC<{ searchTerm: string }> = ({ searchTerm }) => {
           `*, creator:created_by(name, role), approver:approved_by(name, role), approver_lab_incharge:approved_by_lab_incharge(name, role)`,
           { count: 'exact' }
         )
-        .order('created_at', { ascending: false })
-        .range(from, to),
+        .order('created_at', { ascending: false }),
       supabase.from('labs').select('id, name'),
     ]);
 
@@ -83,7 +75,7 @@ const AssetList: React.FC<{ searchTerm: string }> = ({ searchTerm }) => {
       lab_name: newLabMap.get(asset.allocated_lab) || asset.allocated_lab,
     }));
 
-    return { assets, totalCount: totalCount || 0 };
+    return { assets, totalCount: assetsData?.length || 0 };
   };
 
   const {
@@ -91,12 +83,11 @@ const AssetList: React.FC<{ searchTerm: string }> = ({ searchTerm }) => {
     isLoading,
     refetch,
   } = useQuery({
-    queryKey: ['assets', currentPage, itemsPerPage],
+    queryKey: ['assets'],
     queryFn: fetchAssets,
   });
 
   const assets = assetsData.assets;
-  const totalCount = assetsData.totalCount;
 
   useEffect(() => {
     // Subscribe to real-time changes in the assets table
@@ -549,7 +540,7 @@ const AssetList: React.FC<{ searchTerm: string }> = ({ searchTerm }) => {
       {activeTab === 'list' ? (
         <>
           {/* Assets List */}
-          <div className='bg-white dark:bg-gray-800 rounded-lg shadow-sm border border-gray-200 dark:border-gray-700'>
+          <div className='bg-white dark:bg-gray-800 rounded-lg shadow-sm border border-gray-200 dark:border-gray-700 max-h-[calc(100vh-200px)] overflow-y-auto'>
             {filteredAssets.length === 0 ? (
               <div className='text-center py-12'>
                 <Package className='w-12 h-12 text-gray-300 dark:text-gray-600 mx-auto mb-4' />
@@ -596,7 +587,7 @@ const AssetList: React.FC<{ searchTerm: string }> = ({ searchTerm }) => {
                     {filteredAssets.map((asset, index) => (
                       <tr key={asset.id} className='border-b border-gray-200 dark:border-gray-600'>
                         <td className='px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900 dark:text-gray-100'>
-                          {index + 1 + (currentPage - 1) * itemsPerPage}
+                          {index + 1}
                         </td>
                         <td className='px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900 dark:text-gray-100'>
                           <input
@@ -680,53 +671,7 @@ const AssetList: React.FC<{ searchTerm: string }> = ({ searchTerm }) => {
             )}
           </div>
 
-          {/* Pagination Controls */}
-          {totalCount > itemsPerPage && (
-            <div className='flex items-center justify-between mt-6 px-6 py-4 bg-white dark:bg-gray-800 rounded-lg shadow-sm border border-gray-200 dark:border-gray-700'>
-              <div className='flex items-center space-x-2'>
-                <span className='text-sm text-gray-700 dark:text-gray-300'>
-                  Showing {Math.min((currentPage - 1) * itemsPerPage + 1, totalCount)}-
-                  {Math.min(currentPage * itemsPerPage, totalCount)} of {totalCount} assets
-                </span>
-                <select
-                  value={itemsPerPage}
-                  onChange={e => {
-                    setItemsPerPage(Number(e.target.value));
-                    setCurrentPage(1);
-                  }}
-                  className='px-2 py-1 border border-gray-300 dark:border-gray-600 rounded text-sm dark:bg-gray-700 dark:text-gray-200'
-                >
-                  <option value={10}>10 per page</option>
-                  <option value={20}>20 per page</option>
-                  <option value={50}>50 per page</option>
-                  <option value={100}>100 per page</option>
-                </select>
-              </div>
-              <div className='flex items-center space-x-2'>
-                <Button
-                  onClick={() => setCurrentPage(prev => Math.max(1, prev - 1))}
-                  variant='secondary'
-                  size='sm'
-                  disabled={currentPage === 1}
-                >
-                  <ChevronLeft className='w-4 h-4' />
-                </Button>
-                <span className='text-sm text-gray-700 dark:text-gray-300'>
-                  Page {currentPage} of {Math.ceil(totalCount / itemsPerPage)}
-                </span>
-                <Button
-                  onClick={() =>
-                    setCurrentPage(prev => Math.min(Math.ceil(totalCount / itemsPerPage), prev + 1))
-                  }
-                  variant='secondary'
-                  size='sm'
-                  disabled={currentPage >= Math.ceil(totalCount / itemsPerPage)}
-                >
-                  <ChevronRight className='w-4 h-4' />
-                </Button>
-              </div>
-            </div>
-          )}
+
         </>
       ) : (
         <AssetAnalyticsDashboard assets={filteredAssets} labs={Object.fromEntries(labMap)} />
@@ -742,7 +687,6 @@ const AssetList: React.FC<{ searchTerm: string }> = ({ searchTerm }) => {
           }}
           onSave={() => {
             refetch();
-            setCurrentPage(1);
           }}
         />
       )}

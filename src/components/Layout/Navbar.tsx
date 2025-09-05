@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { LogOut, User, Search, Settings, Package, Moon, Sun, ChevronDown } from 'lucide-react';
+import { LogOut, User, Search, Settings, Package, Moon, Sun, ChevronDown, Menu } from 'lucide-react';
 import NotificationBell from '../Notifications/NotificationBell';
 import { useAuth } from '../../contexts/AuthContext';
 import { useTheme } from '../../contexts/ThemeContext';
@@ -9,7 +9,9 @@ import { LabService } from '../../lib/labService';
 const Navbar: React.FC<{
   onSearch: (term: string) => void;
   setActiveTab: (tab: string) => void;
-}> = ({ onSearch, setActiveTab }) => {
+  toggleSidebar: () => void;
+  activeTab: string;
+}> = ({ onSearch, setActiveTab, toggleSidebar, activeTab }) => {
   // Extend profile type to accept lab_name
   const { profile, signOut, updateUserLab } = useAuth();
   const profileWithLabName = profile as typeof profile & { lab_name?: string };
@@ -76,6 +78,13 @@ const Navbar: React.FC<{
       <div className='flex flex-col md:flex-row md:justify-between md:items-center space-y-4 md:space-y-0'>
         {/* Brand / Logo */}
         <div className='flex items-center space-x-3 md:space-x-4'>
+          <button
+            onClick={toggleSidebar}
+            className='md:hidden p-2 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-700 transition-colors'
+            aria-label='Toggle sidebar'
+          >
+            <Menu className='w-6 h-6 text-gray-600 dark:text-gray-300' />
+          </button>
           <div className='bg-blue-100 p-2 rounded-md'>
             <Package className='w-6 h-6 text-blue-600' />
           </div>
@@ -90,18 +99,20 @@ const Navbar: React.FC<{
         </div>
 
         {/* Search Bar, Notification, Profile Section */}
-        <div className='flex items-center space-x-4 w-full md:w-auto'>
+        <div className={`flex items-center space-x-4 w-full md:w-auto ${activeTab === 'dashboard' || activeTab === 'settings' ? 'md:justify-end' : ''}`}>
           {/* Search Bar */}
-          <div className='relative w-full md:max-w-md'>
-            <Search className='absolute left-3 top-1/2 transform -translate-y-1/2 w-5 h-5 text-gray-400 pointer-events-none dark:text-gray-300' />
-            <input
-              type='search'
-              placeholder='Search assets or locations...'
-              value={searchTerm}
-              onChange={handleSearchChange}
-              className='w-full py-2 pl-10 pr-4 text-sm text-gray-900 bg-gray-50 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent dark:bg-gray-700 dark:border-gray-600 dark:text-gray-200 dark:placeholder-gray-400'
-            />
-          </div>
+          {activeTab !== 'dashboard' && activeTab !== 'settings' && (
+            <div className='relative w-full md:max-w-md'>
+              <Search className='absolute left-3 top-1/2 transform -translate-y-1/2 w-5 h-5 text-gray-400 pointer-events-none dark:text-gray-300' />
+              <input
+                type='search'
+                placeholder='Search assets or locations...'
+                value={searchTerm}
+                onChange={handleSearchChange}
+                className='w-full py-2 pl-10 pr-4 text-sm text-gray-900 bg-gray-50 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent dark:bg-gray-700 dark:border-gray-600 dark:text-gray-200 dark:placeholder-gray-400'
+              />
+            </div>
+          )}
 
           {/* Notification Bell */}
           <NotificationBell />

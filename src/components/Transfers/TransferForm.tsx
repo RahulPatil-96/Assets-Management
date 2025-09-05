@@ -176,13 +176,7 @@ const TransferForm: React.FC<TransferFormProps> = ({ onClose, onSave }) => {
           <h2 className="text-xl font-semibold text-gray-900 dark:text-gray-100">
             Initiate Asset Transfer
           </h2>
-          <button
-            onClick={onClose}
-            className="text-gray-400 hover:text-gray-600 dark:hover:text-gray-300 p-2"
-            aria-label="Close transfer form"
-          >
-            <X className="w-5 h-5" />
-          </button>
+          <Button onClick={onClose} variant='ghost' size='sm'><X></X></Button>
         </div>
 
         {/* Form */}

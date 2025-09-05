@@ -80,11 +80,12 @@ export function ForgotPassword() {
             </p>
             <Button
               variant='gradient'
-              text='Back to Sign In'
               fullWidth={true}
               onClick={() => navigate('/signin')}
               className='mt-6 shadow-lg hover:shadow-green-500/20'
-            />
+            >
+              Back to Sign In
+            </Button>
           </div>
         </div>
       </div>
@@ -122,11 +123,12 @@ export function ForgotPassword() {
 
             <Button
               variant='gradient'
-              text='Send Reset Link'
               fullWidth={true}
               loading={loading}
               className='mt-6 shadow-lg hover:shadow-indigo-500/20'
-            />
+            >
+              Send Reset Link
+            </Button>
 
             <p className='text-white/60 text-sm text-center pt-4'>
               Remember your password?{' '}

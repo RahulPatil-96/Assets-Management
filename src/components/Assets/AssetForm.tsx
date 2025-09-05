@@ -4,6 +4,7 @@ import { useAuth } from '../../contexts/AuthContext';
 import { supabase, Asset } from '../../lib/supabase';
 import { NotificationService } from '../../lib/notificationService';
 import { LabService } from '../../lib/labService';
+import Button from '../Button';
 
 interface AssetFormProps {
   asset?: Asset | null;
@@ -161,16 +162,16 @@ const AssetForm: React.FC<AssetFormProps> = ({ asset, onClose, onSave }) => {
         onSave();
         onClose();
       } catch (_error) {
-          console.error('Error saving asset:', _error);
-          let errorMessage = 'Error saving asset. Please try again.';
-          if (_error instanceof Error) {
-            errorMessage += `\n${_error.message}`;
-          } else if (typeof _error === 'string') {
-            errorMessage += `\n${_error}`;
-          } else if (_error && typeof _error === 'object' && 'message' in _error) {
-            errorMessage += `\n${(_error as any).message}`;
-          }
-          alert(errorMessage);
+        console.error('Error saving asset:', _error);
+        let errorMessage = 'Error saving asset. Please try again.';
+        if (_error instanceof Error) {
+          errorMessage += `\n${_error.message}`;
+        } else if (typeof _error === 'string') {
+          errorMessage += `\n${_error}`;
+        } else if (_error && typeof _error === 'object' && 'message' in _error) {
+          errorMessage += `\n${(_error as any).message}`;
+        }
+        alert(errorMessage);
       } finally {
         setLoading(false);
       }
@@ -196,12 +197,7 @@ const AssetForm: React.FC<AssetFormProps> = ({ asset, onClose, onSave }) => {
           <h2 className='text-xl font-semibold text-gray-900 dark:text-gray-100'>
             {asset ? 'Edit Asset' : 'Add New Asset'}
           </h2>
-          <button
-            onClick={onClose}
-            className='text-gray-400 hover:text-gray-600 dark:hover:text-gray-300 p-2'
-          >
-            <X className='w-5 h-5' />
-          </button>
+          <Button onClick={onClose} variant='ghost' size='sm'><X></X></Button>
         </div>
 
         <form onSubmit={handleSubmit} className='p-6 space-y-4'>
@@ -339,21 +335,17 @@ const AssetForm: React.FC<AssetFormProps> = ({ asset, onClose, onSave }) => {
           </div>
 
           <div className='flex justify-end space-x-3 pt-4'>
-            <button
-              type='button'
-              onClick={onClose}
-              className='px-4 py-2 text-gray-700 dark:text-gray-300 border border-gray-300 dark:border-gray-600 rounded-lg hover:bg-gray-50 dark:hover:bg-gray-700 transition-colors'
-            >
-              Cancel
-            </button>
-            <button
-              type='submit'
+            <Button onClick={onClose} variant='danger' size='sm'>Cancel</Button>
+            <Button
+              type="submit"
+              variant="primary"
+              size="md"
               disabled={loading}
-              className='px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 dark:bg-blue-700 dark:hover:bg-blue-800 flex items-center space-x-2 transition-colors disabled:opacity-50'
+              loading={loading}
+              icon={<Save className="w-4 h-4" />}
             >
-              <Save className='w-4 h-4' />
-              <span>{loading ? 'Saving...' : 'Save Asset'}</span>
-            </button>
+              {loading ? 'Saving...' : 'Save Asset'}
+            </Button>
           </div>
         </form>
       </div>

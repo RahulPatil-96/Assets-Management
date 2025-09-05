@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { X } from 'lucide-react';
 import { AssetTransfer, supabase } from '../../lib/supabase';
+import Button from '../Button';
 
 export interface TransferDetailsModalProps {
   transfer: AssetTransfer | null;
@@ -102,12 +103,7 @@ const TransferDetailsModal: React.FC<TransferDetailsModalProps> = ({ transfer, o
           <h2 className='text-xl font-semibold text-gray-900 dark:text-gray-100'>
             Transfer Details
           </h2>
-          <button
-            onClick={onClose}
-            className='text-gray-400 hover:text-gray-600 dark:hover:text-gray-300 transition-colors'
-          >
-            <X className='w-6 h-6' />
-          </button>
+          <Button onClick={onClose} variant='ghost' size='sm'><X></X></Button>
         </div>
 
         <div className='p-6 space-y-6'>
@@ -192,12 +188,9 @@ const TransferDetailsModal: React.FC<TransferDetailsModalProps> = ({ transfer, o
         </div>
 
         <div className='p-6 border-t border-gray-200 dark:border-gray-700'>
-          <button
-            onClick={onClose}
-            className='w-full bg-blue-600 text-white py-2 px-4 rounded-lg hover:bg-blue-700 dark:bg-blue-700 dark:hover:bg-blue-800 transition-colors'
-          >
+          <Button onClick={onClose} variant='secondary' size='md' className='w-48'>
             Close
-          </button>
+          </Button>
         </div>
       </div>
     </div>

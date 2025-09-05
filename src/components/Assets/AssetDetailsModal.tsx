@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { X } from 'lucide-react';
 import { Asset, supabase } from '../../lib/supabase';
 import { LabService } from '../../lib/labService';
+import Button from '../Button';
 
 export interface AssetDetailsModalProps {
   asset: Asset | null;
@@ -80,12 +81,7 @@ const AssetDetailsModal: React.FC<AssetDetailsModalProps> = ({ asset, onClose })
       <div className='bg-white dark:bg-gray-800 rounded-lg shadow-xl max-w-2xl w-full max-h-[90vh] overflow-y-auto'>
         <div className='flex justify-between items-center p-6 border-b border-gray-200 dark:border-gray-700'>
           <h2 className='text-xl font-semibold text-gray-900 dark:text-gray-100'>Asset Details</h2>
-          <button
-            onClick={onClose}
-            className='text-gray-400 hover:text-gray-600 dark:hover:text-gray-300 transition-colors'
-          >
-            <X className='w-6 h-6' />
-          </button>
+          <Button onClick={onClose} variant='ghost' size='sm'><X></X></Button>
         </div>
 
         <div className='p-6 space-y-6'>
@@ -115,11 +111,10 @@ const AssetDetailsModal: React.FC<AssetDetailsModalProps> = ({ asset, onClose })
                 <p className='text-sm'>
                   <span className='font-medium'>Status:</span>
                   <span
-                    className={`ml-2 px-2 py-1 rounded-full text-xs ${
-                      asset.approved
+                    className={`ml-2 px-2 py-1 rounded-full text-xs ${asset.approved
                         ? 'bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-200'
                         : 'bg-yellow-100 text-yellow-800 dark:bg-yellow-900 dark:text-yellow-200'
-                    }`}
+                      }`}
                   >
                     {asset.approved ? 'Approved' : 'Pending Approval'}
                   </span>
@@ -216,14 +211,12 @@ const AssetDetailsModal: React.FC<AssetDetailsModalProps> = ({ asset, onClose })
           </div>
         </div>
 
-        <div className='p-6 border-t border-gray-200 dark:border-gray-700'>
-          <button
-            onClick={onClose}
-            className='w-full bg-blue-600 text-white py-2 px-4 rounded-lg hover:bg-blue-700 dark:bg-blue-700 dark:hover:bg-blue-800 transition-colors'
-          >
+        <div className='p-6 border-t border-gray-200 dark:border-gray-700 flex justify-center'>
+          <Button onClick={onClose} variant='primary' size='md' className='w-48'>
             Close
-          </button>
+          </Button>
         </div>
+
       </div>
     </div>
   );

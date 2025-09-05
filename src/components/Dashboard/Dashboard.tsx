@@ -13,6 +13,7 @@ import { supabase, Asset, AssetIssue } from '../../lib/supabase';
 import { ActivityLogService, ActivityLog } from '../../lib/activityLogService';
 import AssetAnalyticsDashboard from '../Analytics/AssetAnalyticsDashboard';
 import IssueAnalyticsDashboard from '../Analytics/IssueAnalyticsDashboard';
+import Button from '../Button';
 
 interface DashboardStats {
   totalAssets: number;
@@ -247,32 +248,29 @@ const Dashboard: React.FC<DashboardProps> = ({ onNavigate }) => {
       <div className='flex border-b border-gray-200 dark:border-gray-700 mb-6'>
         <button
           onClick={() => setActiveTab('overview')}
-          className={`px-4 py-2 font-medium text-sm ${
-            activeTab === 'overview'
-              ? 'border-b-2 border-blue-500 text-blue-600 dark:text-blue-400'
-              : 'text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-300'
-          }`}
+          className={`px-4 py-2 font-medium text-sm ${activeTab === 'overview'
+            ? 'border-b-2 border-blue-500 text-blue-600 dark:text-blue-400'
+            : 'text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-300'
+            }`}
         >
           Overview
         </button>
         <button
           onClick={() => setActiveTab('assetAnalytics')}
-          className={`px-4 py-2 font-medium text-sm ${
-            activeTab === 'assetAnalytics'
-              ? 'border-b-2 border-blue-500 text-blue-600 dark:text-blue-400'
-              : 'text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-300'
-          }`}
+          className={`px-4 py-2 font-medium text-sm ${activeTab === 'assetAnalytics'
+            ? 'border-b-2 border-blue-500 text-blue-600 dark:text-blue-400'
+            : 'text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-300'
+            }`}
         >
           <BarChart3 className='w-4 h-4 inline mr-2' />
           Asset Analytics
         </button>
         <button
           onClick={() => setActiveTab('issueAnalytics')}
-          className={`px-4 py-2 font-medium text-sm ${
-            activeTab === 'issueAnalytics'
-              ? 'border-b-2 border-blue-500 text-blue-600 dark:text-blue-400'
-              : 'text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-300'
-          }`}
+          className={`px-4 py-2 font-medium text-sm ${activeTab === 'issueAnalytics'
+            ? 'border-b-2 border-blue-500 text-blue-600 dark:text-blue-400'
+            : 'text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-300'
+            }`}
         >
           <BarChart3 className='w-4 h-4 inline mr-2' />
           Issue Analytics
@@ -310,55 +308,53 @@ const Dashboard: React.FC<DashboardProps> = ({ onNavigate }) => {
               <div className='space-y-3'>
                 {profile?.role === 'Lab Assistant' && profile?.lab_id && (
                   <>
-                    <button
+                    <Button
                       onClick={() => onNavigate?.('assets')}
-                      className='w-full text-left p-3 rounded-lg border border-gray-200 dark:border-gray-600 hover:bg-gray-50 dark:hover:bg-gray-700 transition-colors hover:shadow-sm'
+                      variant="card"
+                      fullWidth
+                      icon={<Package className="w-5 h-5 text-blue-600 dark:text-blue-400" />}
                     >
-                      <div className='flex items-center space-x-3'>
-                        <Package className='w-5 h-5 text-blue-600 dark:text-blue-400' />
-                        <span className='font-medium text-gray-900 dark:text-gray-100'>
-                          Add New Asset
-                        </span>
-                      </div>
-                    </button>
-                    <button
+                      <span className="font-medium text-gray-900 dark:text-gray-100">
+                        Add New Asset
+                      </span>
+                    </Button>
+                    <Button
                       onClick={() => onNavigate?.('transfers')}
-                      className='w-full text-left p-3 rounded-lg border border-gray-200 dark:border-gray-600 hover:bg-gray-50 dark:hover:bg-gray-700 transition-colors hover:shadow-sm'
+                      variant="card"
+                      fullWidth
+                      icon={<ArrowRightLeft className="w-5 h-5 text-purple-600 dark:text-purple-400" />}
                     >
-                      <div className='flex items-center space-x-3'>
-                        <ArrowRightLeft className='w-5 h-5 text-purple-600 dark:text-purple-400' />
-                        <span className='font-medium text-gray-900 dark:text-gray-100'>
-                          Initiate Transfer
-                        </span>
-                      </div>
-                    </button>
+                      <span className="font-medium text-gray-900 dark:text-gray-100">
+                        Initiate Transfer
+                      </span>
+                    </Button>
+
                   </>
                 )}
                 {profile?.role === 'Lab Incharge' && (
-                  <button
+                  <Button
                     onClick={() => onNavigate?.('issues')}
-                    className='w-full text-left p-3 rounded-lg border border-gray-200 dark:border-gray-600 hover:bg-gray-50 dark:hover:bg-gray-700 transition-colors hover:shadow-sm'
+                    variant="card"
+                    fullWidth
+                    icon={<AlertTriangle className="w-5 h-5 text-red-600 dark:text-red-400" />}
                   >
-                    <div className='flex items-center space-x-3'>
-                      <AlertTriangle className='w-5 h-5 text-red-600 dark:text-red-400' />
-                      <span className='font-medium text-gray-900 dark:text-gray-100'>
-                        Report Issue
-                      </span>
-                    </div>
-                  </button>
+                    <span className="font-medium text-gray-900 dark:text-gray-100">
+                      Report Issue
+                    </span>
+                  </Button>
+
                 )}
                 {profile?.role === 'HOD' && (
-                  <button
+                  <Button
                     onClick={() => onNavigate?.('approvals')}
-                    className='w-full text-left p-3 rounded-lg border border-gray-200 dark:border-gray-600 hover:bg-gray-50 dark:hover:bg-gray-700 transition-colors hover:极速赛车开奖直播shadow-sm'
+                    variant="card"
+                    fullWidth
+                    icon={<CheckSquare className="w-5 h-5 text-green-600 dark:text-green-400" />}
                   >
-                    <div className='flex items-center space-x-3'>
-                      <CheckSquare className='w-5 h-5 text-green-600 dark:text-green-400' />
-                      <span className='font-medium text-gray-900 dark:text-gray-100'>
-                        Review Approvals
-                      </span>
-                    </div>
-                  </button>
+                    <span className="font-medium text-gray-900 dark:text-gray-100">
+                      Review Approvals
+                    </span>
+                  </Button>
                 )}
               </div>
             </div>

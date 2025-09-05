@@ -14,9 +14,10 @@ import { useAuth } from '../../contexts/AuthContext';
 interface SidebarProps {
   activeTab: string;
   setActiveTab: (tab: string) => void;
+  isOpen: boolean;
 }
 
-const Sidebar: React.FC<SidebarProps> = ({ activeTab, setActiveTab }) => {
+const Sidebar: React.FC<SidebarProps> = ({ activeTab, setActiveTab, isOpen }) => {
   const { profile } = useAuth();
   const [collapsed, setCollapsed] = useState(false);
 
@@ -55,7 +56,9 @@ const Sidebar: React.FC<SidebarProps> = ({ activeTab, setActiveTab }) => {
     <div
       className={`${
         collapsed ? 'w-20' : 'w-64'
-      } h-screen bg-white/10 dark:bg-gray-800 backdrop-blur-lg border border-white/20 dark:border-white/20 shadow-lg transition-all duration-300 flex flex-col`}
+      } h-screen bg-white/10 dark:bg-gray-800 backdrop-blur-lg border border-white/20 dark:border-white/20 shadow-lg transition-all duration-300 flex flex-col ${
+        isOpen ? 'fixed md:relative z-50 md:z-auto' : 'hidden md:flex'
+      }`}
     >
       <div className='p-4 flex items-center justify-between'>
         {!collapsed && <h2 className='text-xl font-bold text-gray'>Menu</h2>}
