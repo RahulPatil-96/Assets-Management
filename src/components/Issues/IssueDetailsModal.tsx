@@ -191,7 +191,7 @@ const IssueDetailsModal: React.FC<IssueDetailsModalProps> = ({ issue, onClose })
           )}
         </div>
 
-        <div className='p-6 border-t border-gray-200 dark:border-gray-700'>
+        <div className='p-6 border-t border-gray-200 dark:border-gray-700 flex justify-center'>
           <Button onClick={onClose} variant='primary' size='md' className='w-48'>
             Close
           </Button>

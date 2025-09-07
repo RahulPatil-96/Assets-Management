@@ -187,8 +187,8 @@ const TransferDetailsModal: React.FC<TransferDetailsModalProps> = ({ transfer, o
           </div>
         </div>
 
-        <div className='p-6 border-t border-gray-200 dark:border-gray-700'>
-          <Button onClick={onClose} variant='secondary' size='md' className='w-48'>
+        <div className='p-6 border-t border-gray-200 dark:border-gray-700 flex justify-center'>
+          <Button onClick={onClose} variant='primary' size='md' className='w-48'>
             Close
           </Button>
         </div>

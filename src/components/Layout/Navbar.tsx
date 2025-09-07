@@ -1,6 +1,16 @@
 import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { LogOut, User, Search, Settings, Package, Moon, Sun, ChevronDown, Menu } from 'lucide-react';
+import {
+  LogOut,
+  User,
+  Search,
+  Settings,
+  Package,
+  Moon,
+  Sun,
+  ChevronDown,
+  Menu,
+} from 'lucide-react';
 import NotificationBell from '../Notifications/NotificationBell';
 import { useAuth } from '../../contexts/AuthContext';
 import { useTheme } from '../../contexts/ThemeContext';
@@ -12,11 +22,11 @@ const Navbar: React.FC<{
   toggleSidebar: () => void;
   activeTab: string;
 }> = ({ onSearch, setActiveTab, toggleSidebar, activeTab }) => {
-  // Extend profile type to accept lab_name
   const { profile, signOut, updateUserLab } = useAuth();
   const profileWithLabName = profile as typeof profile & { lab_name?: string };
   const { theme, toggleTheme } = useTheme();
   const navigate = useNavigate();
+
   const [searchTerm, setSearchTerm] = useState('');
   const [isProfileDropdownOpen, setIsProfileDropdownOpen] = useState(false);
   const [isChangeLabOpen, setIsChangeLabOpen] = useState(false);
@@ -50,12 +60,8 @@ const Navbar: React.FC<{
       isChangeLabOpen
     ) {
       LabService.getLabs()
-        .then(fetchedLabs => {
-          setLabs(fetchedLabs);
-        })
-        .catch(() => {
-          setLabs([]);
-        });
+        .then(fetchedLabs => setLabs(fetchedLabs))
+        .catch(() => setLabs([]));
     }
   }, [isChangeLabOpen, profile?.role]);
 
@@ -74,130 +80,142 @@ const Navbar: React.FC<{
   };
 
   return (
-    <nav className='bg-white/10 dark:bg-gray-800 border-b border-gray-200 dark:border-gray-700 px-6 py-4 shadow-sm'>
-      <div className='flex flex-col md:flex-row md:justify-between md:items-center space-y-4 md:space-y-0'>
-        {/* Brand / Logo */}
-        <div className='flex items-center space-x-3 md:space-x-4'>
+    <nav className="bg-white/10 dark:bg-gray-800 border-b border-gray-200 dark:border-gray-700 px-4 md:px-6 py-3 md:py-4 shadow-sm">
+      <div className="flex items-center justify-between w-full">
+        {/* Left Section: Logo & Sidebar Toggle */}
+        <div className="flex items-center space-x-3 md:space-x-4">
+          {/* Sidebar toggle only on mobile */}
           <button
             onClick={toggleSidebar}
-            className='md:hidden p-2 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-700 transition-colors'
-            aria-label='Toggle sidebar'
+            className="md:hidden p-2 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-700 transition-colors"
+            aria-label="Toggle sidebar"
           >
-            <Menu className='w-6 h-6 text-gray-600 dark:text-gray-300' />
+            <Menu className="w-6 h-6 text-gray-600 dark:text-gray-300" />
           </button>
-          <div className='bg-blue-100 p-2 rounded-md'>
-            <Package className='w-6 h-6 text-blue-600' />
-          </div>
-          <div>
-            <h1 className='text-2xl font-bold text-gray-900 dark:text-white tracking-tight leading-tight'>
-              AssetFlow
-            </h1>
-            <p className='text-sm text-gray-500 dark:text-gray-300 -mt-1'>
-              Track. Manage. Maintain.
-            </p>
+
+          <div className="flex items-center space-x-2">
+            <div className="bg-blue-100 p-2 rounded-md">
+              <Package className="w-6 h-6 text-blue-600" />
+            </div>
+            <div className="block">
+              <h1 className="text-xl md:text-2xl font-bold text-gray-900 dark:text-white tracking-tight">
+                AssetFlow
+              </h1>
+              <p className="text-xs md:text-sm text-gray-500 dark:text-gray-300">
+                Track. Manage. Maintain.
+              </p>
+            </div>
           </div>
         </div>
 
-        {/* Search Bar, Notification, Profile Section */}
-        <div className={`flex items-center space-x-4 w-full md:w-auto ${activeTab === 'dashboard' || activeTab === 'settings' ? 'md:justify-end' : ''}`}>
-          {/* Search Bar */}
-          {activeTab !== 'dashboard' && activeTab !== 'settings' && (
-            <div className='relative w-full md:max-w-md'>
-              <Search className='absolute left-3 top-1/2 transform -translate-y-1/2 w-5 h-5 text-gray-400 pointer-events-none dark:text-gray-300' />
+        {/* Center: Search bar (hidden on small screens) */}
+        {activeTab !== 'dashboard' && activeTab !== 'settings' && (
+          <div className="hidden md:flex flex-1 justify-center px-4">
+            <div className="relative w-full max-w-md">
+              <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 text-gray-400 dark:text-gray-300 pointer-events-none" />
               <input
-                type='search'
-                placeholder='Search assets or locations...'
+                type="search"
+                placeholder="Search assets or locations..."
                 value={searchTerm}
                 onChange={handleSearchChange}
-                className='w-full py-2 pl-10 pr-4 text-sm text-gray-900 bg-gray-50 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent dark:bg-gray-700 dark:border-gray-600 dark:text-gray-200 dark:placeholder-gray-400'
+                className="w-full py-2 pl-10 pr-4 text-sm text-gray-900 bg-gray-50 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 dark:bg-gray-700 dark:border-gray-600 dark:text-gray-200 dark:placeholder-gray-400"
               />
             </div>
-          )}
+          </div>
+        )}
 
-          {/* Notification Bell */}
+        {/* Right Section: Notification, Theme, Profile */}
+        <div className="flex items-center space-x-3 md:space-x-4">
           <NotificationBell />
 
           {/* Theme Toggle */}
           <button
             onClick={toggleTheme}
-            className='p-2 rounded-lg hover:bg-gray-300 dark:hover:bg-gray-700 transition-colors duration-200'
+            className="p-2 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-700 transition-colors duration-200"
             aria-label={`Switch to ${theme === 'light' ? 'dark' : 'light'} mode`}
           >
             {theme === 'light' ? (
-              <Moon className='w-5 h-5 text-gray-600 dark:text-gray-300 hover:text-gray-900 dark:hover:text-white ' />
+              <Moon className="w-5 h-5 text-gray-600" />
             ) : (
-              <Sun className='w-5 h-5 text-gray-600 dark:text-gray-300 hover:text-gray-900 dark:hover:text-white' />
+              <Sun className="w-5 h-5 text-yellow-400" />
             )}
           </button>
 
           {/* Profile Section */}
-          <div className='relative w-full md:w-[300px]'>
-            {' '}
-            {/* Increase width here */}
+          <div className="relative">
             <button
               onClick={() => setIsProfileDropdownOpen(!isProfileDropdownOpen)}
-              className='flex items-center space-x-2 sm:space-x-3 p-2 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-700 transition-colors duration-200 min-h-[44px]'
+              className="flex items-center space-x-2 md:space-x-3 p-2 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-700 transition-colors"
               aria-expanded={isProfileDropdownOpen}
-              aria-label='User profile menu'
             >
-              <div className='text-left w-full'>
-                {' '}
-                {/* Align text to the left */}
-                <p className='text-sm font-medium text-gray-900 dark:text-gray-100 truncate'>
+              <div className="hidden sm:block text-left">
+                <p className="text-sm font-medium text-gray-900 dark:text-gray-100 truncate">
                   {profile?.name}
                 </p>
-                <div className='flex flex-col items-start space-y-1 w-full'>
+                <div className="flex flex-col items-start space-y-0.5">
                   <span
-                    className={`px-2 py-0.5 rounded-full text-xs font-medium ${getRoleColor(profile?.role || '')} truncate`}
+                    className={`px-2 py-0.5 rounded-full text-xs font-medium ${getRoleColor(
+                      profile?.role || ''
+                    )} truncate`}
                   >
                     {profile?.role}
                   </span>
-                  <span className='text-xs text-gray-500 dark:text-gray-400 truncate'>
-                    {profileWithLabName.lab_name || profileWithLabName.lab_id || ''}
+                  <span className="text-xs text-gray-500 dark:text-gray-400 truncate">
+                    {profileWithLabName.lab_name ||
+                      profileWithLabName.lab_id ||
+                      ''}
                   </span>
                 </div>
               </div>
 
               {/* Avatar */}
-              <div className='w-10 h-10 rounded-full overflow-hidden bg-gray-200 flex items-center justify-center shadow-sm dark:bg-gray-600'>
-                <User className='w-6 h-6 text-gray-600 dark:text-gray-300' />
+              <div className="w-9 h-9 md:w-10 md:h-10 rounded-full bg-gray-200 dark:bg-gray-600 flex items-center justify-center">
+                <User className="w-5 h-5 text-gray-600 dark:text-gray-300" />
               </div>
             </button>
+
             {/* Profile Dropdown */}
             {isProfileDropdownOpen && (
-              <div className='absolute right-0 mt-2 w-48 bg-white dark:bg-gray-800 rounded-lg shadow-lg border border-gray-200 dark:border-gray-700 py-1 z-50'>
-                <div className='px-4 py-2 border-b border-gray-100 dark:border-gray-700'>
-                  <p className='text-sm font-medium text-gray-900 dark:text-gray-100'>
+              <div className="absolute right-0 mt-2 w-56 bg-white dark:bg-gray-800 rounded-lg shadow-lg border border-gray-200 dark:border-gray-700 py-1 z-50">
+                <div className="px-4 py-2 border-b border-gray-100 dark:border-gray-700">
+                  <p className="text-sm font-medium text-gray-900 dark:text-gray-100">
                     {profile?.name}
                   </p>
-                  <p className='text-xs text-gray-500 dark:text-gray-400'>{profile?.role}</p>
+                  <p className="text-xs text-gray-500 dark:text-gray-400">
+                    {profile?.role}
+                  </p>
                 </div>
+
                 <button
                   onClick={() => {
                     setIsProfileDropdownOpen(false);
                     setActiveTab('settings');
                   }}
-                  className='flex items-center space-x-2 w-full px-4 py-3 text-sm text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-700 transition-colors duration-150'
+                  className="flex items-center space-x-2 w-full px-4 py-3 text-sm text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-700"
                 >
-                  <Settings className='w-4 h-4' />
+                  <Settings className="w-4 h-4" />
                   <span>Settings</span>
                 </button>
-                {/* Change Lab option for Lab Assistant and Lab Incharge */}
-                {(profile?.role === 'Lab Assistant' || profile?.role === 'Lab Incharge') && (
+
+                {/* Change Lab option */}
+                {(profile?.role === 'Lab Assistant' ||
+                  profile?.role === 'Lab Incharge') && (
                   <div>
                     <button
                       onClick={() => setIsChangeLabOpen(!isChangeLabOpen)}
-                      className='flex items-center justify-between w-full px-4 py-3 text-sm text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-700 transition-colors duration-150'
+                      className="flex items-center justify-between w-full px-4 py-3 text-sm text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-700"
                     >
                       <span>Change Lab</span>
                       <ChevronDown
-                        className={`w-4 h-4 transition-transform duration-200 ${isChangeLabOpen ? 'rotate-180' : ''}`}
+                        className={`w-4 h-4 transition-transform duration-200 ${
+                          isChangeLabOpen ? 'rotate-180' : ''
+                        }`}
                       />
                     </button>
                     {isChangeLabOpen && (
-                      <div className='max-h-48 overflow-y-auto border-t border-gray-200 dark:border-gray-700'>
+                      <div className="max-h-48 overflow-y-auto border-t border-gray-200 dark:border-gray-700">
                         {labs.length === 0 && (
-                          <p className='px-4 py-2 text-xs text-gray-500 dark:text-gray-400'>
+                          <p className="px-4 py-2 text-xs text-gray-500 dark:text-gray-400">
                             No labs available
                           </p>
                         )}
@@ -206,7 +224,7 @@ const Navbar: React.FC<{
                             key={lab.id}
                             onClick={() => handleLabSelect(lab.id)}
                             disabled={isUpdatingLab}
-                            className={`block w-full text-left px-4 py-2 text-sm hover:bg-gray-100 dark:hover:bg-gray-700 transition-colors duration-150 ${
+                            className={`block w-full text-left px-4 py-2 text-sm hover:bg-gray-100 dark:hover:bg-gray-700 ${
                               selectedLabId === lab.id
                                 ? 'font-semibold text-blue-600'
                                 : 'text-gray-700 dark:text-gray-300'
@@ -216,7 +234,7 @@ const Navbar: React.FC<{
                           </button>
                         ))}
                         {updateError && (
-                          <p className='px-4 py-2 text-xs text-red-600 dark:text-red-400'>
+                          <p className="px-4 py-2 text-xs text-red-600 dark:text-red-400">
                             {updateError}
                           </p>
                         )}
@@ -224,15 +242,16 @@ const Navbar: React.FC<{
                     )}
                   </div>
                 )}
+
                 <button
                   onClick={async () => {
                     setIsProfileDropdownOpen(false);
                     await signOut();
                     navigate('/signin');
                   }}
-                  className='flex items-center space-x-2 w-full px-4 py-3 text-sm text-red-600 dark:text-red-400 hover:bg-red-50 dark:hover:bg-red-900/30 transition-colors duration-150'
+                  className="flex items-center space-x-2 w-full px-4 py-3 text-sm text-red-600 dark:text-red-400 hover:bg-red-50 dark:hover:bg-red-900/30"
                 >
-                  <LogOut className='w-4 h-4' />
+                  <LogOut className="w-4 h-4" />
                   <span>Sign Out</span>
                 </button>
               </div>
