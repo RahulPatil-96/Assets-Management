@@ -616,32 +616,36 @@ DECLARE
 BEGIN
   -- Get actor ID from current session
   v_actor_id := auth.uid();
-  
-  -- Get asset name
-  SELECT name_of_supply INTO v_asset_name FROM assets WHERE id = COALESCE(NEW.asset_id, OLD.asset_id);
-  
+
+  -- Get asset name - ensure we get the correct asset name
   IF TG_OP = 'INSERT' THEN
-    -- Log creation
+    SELECT name_of_supply INTO v_asset_name FROM assets WHERE id = NEW.asset_id;
+  ELSE
+    SELECT name_of_supply INTO v_asset_name FROM assets WHERE id = COALESCE(NEW.asset_id, OLD.asset_id);
+  END IF;
+
+  IF TG_OP = 'INSERT' THEN
+    -- Log creation with asset name
     v_new_data := to_jsonb(NEW);
     PERFORM log_activity(
       v_actor_id,
       'report',
       'issue',
       NEW.id,
-      COALESCE(v_asset_name, 'Issue #' || NEW.id::text),
+      COALESCE(v_asset_name, 'Unknown Asset'),
       NULL,
       v_new_data,
       NULL,
       'warning',
       true
     );
-    
+
   ELSIF TG_OP = 'UPDATE' THEN
     -- Log update
     v_old_data := to_jsonb(OLD);
     v_new_data := to_jsonb(NEW);
     v_changes := get_jsonb_diff(v_old_data, v_new_data);
-    
+
     -- Check if this is a resolution action
     IF OLD.status = 'open' AND NEW.status = 'resolved' THEN
       PERFORM log_activity(
@@ -649,7 +653,7 @@ BEGIN
         'resolve',
         'issue',
         NEW.id,
-        COALESCE(v_asset_name, 'Issue #' || NEW.id::text),
+        NEW.issue_description,
         v_old_data,
         v_new_data,
         v_changes,
@@ -662,7 +666,7 @@ BEGIN
         'update',
         'issue',
         NEW.id,
-        COALESCE(v_asset_name, 'Issue #' || NEW.id::text),
+        NEW.issue_description,
         v_old_data,
         v_new_data,
         v_changes,
@@ -670,7 +674,7 @@ BEGIN
         true
       );
     END IF;
-    
+
   ELSIF TG_OP = 'DELETE' THEN
     -- Log deletion
     v_old_data := to_jsonb(OLD);
@@ -679,7 +683,7 @@ BEGIN
       'delete',
       'issue',
       OLD.id,
-      COALESCE(v_asset_name, 'Issue #' || OLD.id::text),
+      COALESCE(v_asset_name, 'Unknown Asset'),
       v_old_data,
       NULL,
       NULL,
@@ -896,6 +900,67 @@ CREATE POLICY assets_update_lab_assistant ON assets
     )
   );
 
+-- assets: Allow update for HOD (can approve any asset)
+CREATE POLICY assets_update_hod ON assets
+  FOR UPDATE TO authenticated
+  USING (
+    EXISTS (
+      SELECT 1 FROM user_profiles
+      WHERE auth_id = auth.uid()
+        AND role = 'HOD'
+    )
+  )
+  WITH CHECK (
+    EXISTS (
+      SELECT 1 FROM user_profiles
+      WHERE auth_id = auth.uid()
+        AND role = 'HOD'
+    )
+  );
+
+-- assets: Allow update for Lab Incharge (can approve assets in their lab)
+CREATE POLICY assets_update_lab_incharge ON assets
+  FOR UPDATE TO authenticated
+  USING (
+    EXISTS (
+      SELECT 1 FROM user_profiles
+      WHERE auth_id = auth.uid()
+        AND role = 'Lab Incharge'
+        AND lab_id = assets.allocated_lab
+    )
+  )
+  WITH CHECK (
+    EXISTS (
+      SELECT 1 FROM user_profiles
+      WHERE auth_id = auth.uid()
+        AND role = 'Lab Incharge'
+        AND lab_id = assets.allocated_lab
+    )
+  );
+
+-- assets: Allow delete for HOD (can delete any asset)
+CREATE POLICY assets_delete_hod ON assets
+  FOR DELETE TO authenticated
+  USING (
+    EXISTS (
+      SELECT 1 FROM user_profiles
+      WHERE auth_id = auth.uid()
+        AND role = 'HOD'
+    )
+  );
+
+-- assets: Allow delete for Lab Incharge (can delete assets in their lab)
+CREATE POLICY assets_delete_lab_incharge ON assets
+  FOR DELETE TO authenticated
+  USING (
+    EXISTS (
+      SELECT 1 FROM user_profiles
+      WHERE auth_id = auth.uid()
+        AND role = 'Lab Incharge'
+        AND lab_id = assets.allocated_lab
+    )
+  );
+
 -- asset_issues: All users can see all issues
 CREATE POLICY issues_all ON asset_issues
   FOR SELECT USING (true);
@@ -923,6 +988,30 @@ CREATE POLICY issues_update_lab_assistant ON asset_issues
       JOIN assets a ON a.id = asset_issues.asset_id
       WHERE up.auth_id = auth.uid()
         AND up.role = 'Lab Assistant'
+        AND up.lab_id = a.allocated_lab
+    )
+  );
+
+-- asset_issues: Allow delete for HOD (can delete any issue)
+CREATE POLICY issues_delete_hod ON asset_issues
+  FOR DELETE TO authenticated
+  USING (
+    EXISTS (
+      SELECT 1 FROM user_profiles
+      WHERE auth_id = auth.uid()
+        AND role = 'HOD'
+    )
+  );
+
+-- asset_issues: Allow delete for Lab Incharge (can delete issues in their lab)
+CREATE POLICY issues_delete_lab_incharge ON asset_issues
+  FOR DELETE TO authenticated
+  USING (
+    EXISTS (
+      SELECT 1 FROM user_profiles up
+      JOIN assets a ON a.id = asset_issues.asset_id
+      WHERE up.auth_id = auth.uid()
+        AND up.role = 'Lab Incharge'
         AND up.lab_id = a.allocated_lab
     )
   );

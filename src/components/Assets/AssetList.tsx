@@ -185,8 +185,9 @@ const AssetList: React.FC<{ searchTerm: string }> = ({ searchTerm }) => {
 
       toast.success('Asset approved successfully!');
       refetch();
-    } catch (_error) {
-      // console.error('Error approving asset:', _error);
+    } catch (error: any) {
+      console.error('Error approving asset:', error);
+      toast.error(`Failed to approve asset: ${error.message || 'Unknown error'}`);
     }
   };
 
@@ -207,8 +208,9 @@ const AssetList: React.FC<{ searchTerm: string }> = ({ searchTerm }) => {
       // Notification is now only sent from the form, not here
       toast.success('Asset deleted successfully!');
       refetch();
-    } catch (_error) {
-      // console.error('Error deleting asset:', _error);
+    } catch (error: any) {
+      console.error('Error deleting asset:', error);
+      toast.error(`Failed to delete asset: ${error.message || 'Unknown error'}`);
     } finally {
       setIsDeleting(false);
       setShowDeleteModal(false);

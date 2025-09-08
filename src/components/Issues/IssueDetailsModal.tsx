@@ -1,7 +1,10 @@
 import React, { useState, useEffect } from 'react';
-import { X } from 'lucide-react';
+import { X, Trash2 } from 'lucide-react';
+import { toast } from 'react-hot-toast';
 import { AssetIssue, supabase } from '../../lib/supabase';
+import { useAuth } from '../../contexts/AuthContext';
 import Button from '../Button';
+import ConfirmationModal from '../Layout/ConfirmationModal';
 
 export interface IssueDetailsModalProps {
   issue: AssetIssue | null;
@@ -9,8 +12,11 @@ export interface IssueDetailsModalProps {
 }
 
 const IssueDetailsModal: React.FC<IssueDetailsModalProps> = ({ issue, onClose }) => {
+  const { profile } = useAuth();
   const [resolverName, setResolverName] = useState<string>('');
   const [loadingResolver, setLoadingResolver] = useState(false);
+  const [showDeleteModal, setShowDeleteModal] = useState(false);
+  const [isDeleting, setIsDeleting] = useState(false);
 
   useEffect(() => {
     const fetchResolverName = async () => {
@@ -51,6 +57,36 @@ const IssueDetailsModal: React.FC<IssueDetailsModalProps> = ({ issue, onClose })
 
     fetchResolverName();
   }, [issue?.resolved_by, issue?.resolver?.name]);
+
+  const canDelete = () => {
+    if (!profile || !issue) return false;
+    if (profile.role === 'HOD') return true;
+    if (profile.role === 'Lab Incharge' && profile.lab_id === issue.asset?.allocated_lab) return true;
+    return false;
+  };
+
+  const handleDelete = async () => {
+    if (!issue) return;
+
+    setIsDeleting(true);
+    try {
+      const { error } = await supabase
+        .from('asset_issues')
+        .delete()
+        .eq('id', issue.id);
+
+      if (error) throw error;
+
+      toast.success('Issue deleted successfully!');
+      setShowDeleteModal(false);
+      onClose();
+    } catch (error) {
+      console.error('Error deleting issue:', error);
+      toast.error('Failed to delete issue. Please try again.');
+    } finally {
+      setIsDeleting(false);
+    }
+  };
 
   if (!issue) return null;
 
@@ -191,12 +227,35 @@ const IssueDetailsModal: React.FC<IssueDetailsModalProps> = ({ issue, onClose })
           )}
         </div>
 
-        <div className='p-6 border-t border-gray-200 dark:border-gray-700 flex justify-center'>
+        <div className='p-6 border-t border-gray-200 dark:border-gray-700 flex justify-between'>
+          {canDelete() && (
+            <Button
+              onClick={() => setShowDeleteModal(true)}
+              variant='danger'
+              size='md'
+              icon={<Trash2 className="w-4 h-4" />}
+            >
+              Delete Issue
+            </Button>
+          )}
           <Button onClick={onClose} variant='primary' size='md' className='w-48'>
             Close
           </Button>
         </div>
       </div>
+
+      <ConfirmationModal
+        isOpen={showDeleteModal}
+        onClose={() => setShowDeleteModal(false)}
+        onConfirm={handleDelete}
+        title="Delete Issue"
+        message="Are you sure you want to delete this issue? This action cannot be undone."
+        confirmText="Delete"
+        cancelText="Cancel"
+        type="delete"
+        isLoading={isDeleting}
+        destructive
+      />
     </div>
   );
 };
