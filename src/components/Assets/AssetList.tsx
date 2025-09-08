@@ -146,6 +146,7 @@ const AssetList: React.FC<{ searchTerm: string }> = ({ searchTerm }) => {
     try {
       const isHOD = profile?.role === 'HOD';
       const isLabIncharge = profile?.role === 'Lab Incharge';
+      const isLabAssistant = profile?.role === 'Lab Assistant';
 
       let updateData: {
         approved_by?: string;
@@ -165,7 +166,7 @@ const AssetList: React.FC<{ searchTerm: string }> = ({ searchTerm }) => {
         if (asset.approved_by_lab_incharge) {
           updateData.approved = true;
         }
-      } else if (isLabIncharge) {
+      } else if (isLabIncharge || isLabAssistant) {
         updateData = {
           approved_by_lab_incharge: profile?.id,
           approved_at_lab_incharge: new Date().toISOString(),
@@ -337,11 +338,14 @@ const AssetList: React.FC<{ searchTerm: string }> = ({ searchTerm }) => {
   const canApprove = (asset: Asset) => {
     const isHOD = profile?.role === 'HOD';
     const isLabIncharge = profile?.role === 'Lab Incharge';
+    const isLabAssistant = profile?.role === 'Lab Assistant';
 
     if (isHOD) {
       return !asset.approved_by && !asset.approved;
     } else if (isLabIncharge) {
-      return !asset.approved_by_lab_incharge && !asset.approved;
+      return !asset.approved_by_lab_incharge && !asset.approved && profile.lab_id === asset.allocated_lab;
+    } else if (isLabAssistant) {
+      return !asset.approved_by_lab_incharge && !asset.approved && profile.lab_id === asset.allocated_lab;
     }
 
     return false;
@@ -349,7 +353,7 @@ const AssetList: React.FC<{ searchTerm: string }> = ({ searchTerm }) => {
 
   const canDelete = (asset: Asset) =>
     (profile?.role === 'HOD') ||
-    (profile?.role === 'Lab Incharge' && !asset.approved_by && !asset.approved) ||
+    (profile?.role === 'Lab Incharge' && !asset.approved_by && !asset.approved && profile.lab_id === asset.allocated_lab) ||
     (profile?.role === 'Lab Assistant' &&
       asset.created_by === profile?.id &&
       !asset.approved_by_lab_incharge &&

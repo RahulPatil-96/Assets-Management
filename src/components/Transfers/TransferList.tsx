@@ -24,7 +24,7 @@ const TransferListComponent: React.FC<{ searchTerm: string }> = ({ searchTerm: p
       .select(
         `
         *,
-        asset:assets(name_of_supply, sr_no, asset_id),
+        asset:assets(name_of_supply, sr_no, asset_id, allocated_lab),
         initiator:initiated_by(name, role),
         receiver:received_by(name, role),
         from_lab_data:from_lab(name, lab_identifier),
@@ -120,8 +120,10 @@ const TransferListComponent: React.FC<{ searchTerm: string }> = ({ searchTerm: p
 
   const canDelete = useCallback(
     (transfer: AssetTransfer) =>
-      profile?.role === 'Lab Incharge' && transfer.status === 'pending',
-    [profile?.role]
+      profile?.role === 'Lab Incharge' &&
+      transfer.status === 'pending' &&
+      transfer.from_lab === profile?.lab_id,
+    [profile?.role, profile?.lab_id]
   );
 
   const filteredTransfers = transfers

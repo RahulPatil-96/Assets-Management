@@ -188,7 +188,7 @@ const IssueListComponent: React.FC<{ searchTerm: string }> = ({ searchTerm: prop
   };
 
   const canResolve = (issue: AssetIssue) =>
-    profile?.role === 'Lab Assistant' &&
+    (profile?.role === 'Lab Assistant' || profile?.role === 'Lab Incharge') &&
     issue.status === 'open' &&
     profile.lab_id === issue.asset?.allocated_lab;
 
