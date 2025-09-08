@@ -1,4 +1,4 @@
-import React, { createContext, useContext, useEffect, useState, useCallback } from 'react';
+import React, { createContext, useContext, useEffect, useState, useCallback, useRef } from 'react';
 import { useAuth } from './AuthContext';
 import { NotificationService, Notification } from '../lib/notificationService';
 import { notificationSoundService } from '../lib/notificationSoundService';
@@ -20,6 +20,7 @@ export const NotificationProvider: React.FC<{ children: React.ReactNode }> = ({ 
   const [notifications, setNotifications] = useState<Notification[]>([]);
   const [unreadCount, setUnreadCount] = useState(0);
   const [loading, setLoading] = useState(false);
+  const recentNotificationIds = useRef(new Set<string>());
 
   const fetchNotifications = useCallback(async () => {
     if (!user) return;
@@ -72,8 +73,28 @@ export const NotificationProvider: React.FC<{ children: React.ReactNode }> = ({ 
 
       // Subscribe to real-time notifications
       const unsubscribe = NotificationService.subscribeToNotifications(user.id, newNotification => {
-        setNotifications(prev => [newNotification, ...prev]);
-        setUnreadCount(prev => prev + 1);
+        // Check if this notification was recently processed to prevent duplicates
+        if (recentNotificationIds.current.has(newNotification.id)) {
+          return;
+        }
+        recentNotificationIds.current.add(newNotification.id);
+
+        // Clean up old ids after 30 seconds
+        setTimeout(() => {
+          recentNotificationIds.current.delete(newNotification.id);
+        }, 30000);
+
+        setNotifications(prev => {
+          // Check if notification already exists to prevent duplicates
+          const exists = prev.some(notification => notification.id === newNotification.id);
+          if (exists) return prev;
+          return [newNotification, ...prev];
+        });
+        setUnreadCount(prevUnreadCount => {
+          // Only increment if notification is new
+          const exists = notifications.some(notification => notification.id === newNotification.id);
+          return exists ? prevUnreadCount : prevUnreadCount + 1;
+        });
         NotificationService.showToast(newNotification);
         // Play notification sound
         notificationSoundService.playNotification();

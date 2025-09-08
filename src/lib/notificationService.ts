@@ -231,6 +231,7 @@ export class NotificationService {
   static showToast(notification: Notification) {
     const actionIcon = {
       created: '🆕',
+      report: '📢',
       updated: '✏️',
       deleted: '🗑️',
       transferred: '📦',
@@ -255,6 +256,7 @@ export class NotificationService {
   static getToastColor(actionType: string) {
     switch (actionType) {
       case 'created':
+      case 'report':
         return '#38a169'; // green
       case 'updated':
         return '#3182ce'; // blue

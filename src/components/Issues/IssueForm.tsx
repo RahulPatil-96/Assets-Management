@@ -1,8 +1,8 @@
 import React, { useState, useEffect } from 'react';
 import { X, Save, Search } from 'lucide-react';
+import { toast } from 'react-hot-toast';
 import { useAuth } from '../../contexts/AuthContext';
 import { supabase, Asset } from '../../lib/supabase';
-import { NotificationService } from '../../lib/notificationService';
 import { Lab } from '../../types/lab';
 import Button from '../Button';
 
@@ -60,7 +60,7 @@ const IssueForm: React.FC<IssueFormProps> = ({ onClose, onSave }) => {
     setLoading(true);
 
     try {
-      const { data: newIssue, error } = await supabase
+      const { error } = await supabase
         .from('asset_issues')
         .insert({
           ...formData,
@@ -71,23 +71,18 @@ const IssueForm: React.FC<IssueFormProps> = ({ onClose, onSave }) => {
 
       if (error) throw error;
 
-      // Create notification for all users about the new issue
-      if (profile?.id && newIssue) {
-        await NotificationService.createNotificationForAllUsers(
-          profile.id,
-          'report',
-          'issue',
-          newIssue.id,
-          formData.issue_description
-        );
-      }
-
+      toast.success('Issue reported successfully!');
       onSave();
-      onClose();
-    } catch (_error) {
-      // console.error('Error reporting issue:', _error);
-      alert('Error reporting issue. Please try again.');
-    } finally {
+  } catch (_error) {
+    console.error('Error reporting issue:', _error);
+    console.error('Error details:', {
+      message: _error instanceof Error ? _error.message : 'Unknown error',
+      code: (_error as any)?.code,
+      details: (_error as any)?.details,
+      hint: (_error as any)?.hint,
+    });
+    toast.error('Error reporting issue. Please try again.');
+  } finally {
       setLoading(false);
     }
   };

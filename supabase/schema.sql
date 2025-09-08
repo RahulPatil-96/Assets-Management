@@ -869,9 +869,16 @@ CREATE POLICY user_profiles_insert_system ON user_profiles
 CREATE POLICY assets_all ON assets
   FOR SELECT USING (true);
 
+-- assets: Allow insert for authenticated users whose lab_id matches allocated_lab
+CREATE POLICY assets_insert_authenticated ON assets
+  FOR INSERT TO authenticated
+  WITH CHECK (
+    (SELECT lab_id FROM user_profiles WHERE auth_id = auth.uid()) = allocated_lab
+  );
+
 -- assets: Allow update and delete only if user is Lab Assistant and user's lab_id matches allocated_lab
-CREATE POLICY assets_update_delete_lab_assistant ON assets
-  FOR UPDATE, DELETE
+CREATE POLICY assets_update_lab_assistant ON assets
+  FOR UPDATE TO authenticated
   USING (
     EXISTS (
       SELECT 1 FROM user_profiles
@@ -892,6 +899,11 @@ CREATE POLICY assets_update_delete_lab_assistant ON assets
 -- asset_issues: All users can see all issues
 CREATE POLICY issues_all ON asset_issues
   FOR SELECT USING (true);
+
+-- asset_issues: Allow insert for authenticated users
+CREATE POLICY issues_insert ON asset_issues
+  FOR INSERT
+  WITH CHECK (auth.uid() IS NOT NULL);
 
 -- asset_issues: Allow update only if user is Lab Assistant and user's lab_id matches asset's allocated_lab
 CREATE POLICY issues_update_lab_assistant ON asset_issues

@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { X, Save, Search } from 'lucide-react';
+import { toast } from 'react-hot-toast';
 import { useAuth } from '../../contexts/AuthContext';
 import { supabase, Asset } from '../../lib/supabase';
 import { LabService } from '../../lib/labService';
@@ -135,6 +136,7 @@ const TransferForm: React.FC<TransferFormProps> = ({ onClose, onSave }) => {
 
         onSave();
         onClose();
+        toast.success('Asset transfer initiated successfully!');
       } catch (_error) {
         alert(
           `Error initiating transfer: ${

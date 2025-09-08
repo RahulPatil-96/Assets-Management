@@ -10,6 +10,7 @@ import {
   Eye,
   BarChart3,
 } from 'lucide-react';
+import { toast } from 'react-hot-toast';
 import { useAuth } from '../../contexts/AuthContext';
 import { supabase, Asset } from '../../lib/supabase';
 import AssetForm from './AssetForm';
@@ -182,6 +183,7 @@ const AssetList: React.FC<{ searchTerm: string }> = ({ searchTerm }) => {
 
       // Notification is now only sent from the form, not here
 
+      toast.success('Asset approved successfully!');
       refetch();
     } catch (_error) {
       // console.error('Error approving asset:', _error);
@@ -203,6 +205,7 @@ const AssetList: React.FC<{ searchTerm: string }> = ({ searchTerm }) => {
       if (error) throw error;
 
       // Notification is now only sent from the form, not here
+      toast.success('Asset deleted successfully!');
       refetch();
     } catch (_error) {
       // console.error('Error deleting asset:', _error);
@@ -251,6 +254,7 @@ const AssetList: React.FC<{ searchTerm: string }> = ({ searchTerm }) => {
       }
       const { error } = await supabase.from('assets').delete().in('id', deletableAssets.map(a => a.id));
       if (error) throw error;
+      toast.success(`${deletableAssets.length} assets deleted successfully!`);
       refetch();
       setSelectedAssets(new Set());
       setShowBulkActions(false);
@@ -272,6 +276,7 @@ const AssetList: React.FC<{ searchTerm: string }> = ({ searchTerm }) => {
 
       if (error) throw error;
 
+      toast.success(`${selectedAssets.size} assets approved successfully!`);
       refetch();
       setSelectedAssets(new Set());
       setShowBulkActions(false);

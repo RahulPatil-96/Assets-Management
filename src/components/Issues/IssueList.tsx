@@ -442,8 +442,9 @@ const IssueListComponent: React.FC<{ searchTerm: string }> = ({ searchTerm: prop
       )}
 
       {/* Modals */}
-      {showForm && <IssueForm onClose={() => setShowForm(false)} onSave={function (): void {
-        throw new Error('Function not implemented.');
+      {showForm && <IssueForm onClose={() => setShowForm(false)} onSave={() => {
+        refetch(); // Refetch issues after successful submission
+        setShowForm(false);
       }} />}
       {viewingIssue && (
         <IssueDetailsModalWithErrorBoundary issue={viewingIssue} onClose={() => setViewingIssue(null)} />

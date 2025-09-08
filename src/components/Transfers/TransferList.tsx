@@ -1,6 +1,7 @@
 import React, { useState, useCallback } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { ArrowRightLeft, Plus, CheckCircle, Clock, Eye, Trash2 } from 'lucide-react';
+import { toast } from 'react-hot-toast';
 import { useAuth } from '../../contexts/AuthContext';
 import { supabase, AssetTransfer } from '../../lib/supabase';
 import TransferForm from './TransferForm';
@@ -57,6 +58,7 @@ const TransferListComponent: React.FC<{ searchTerm: string }> = ({ searchTerm: p
           .eq('id', transferId);
 
         if (error) throw error;
+        toast.success('Asset transfer received successfully!');
         refetch();
       } catch (_error) {
         // console.error('Error receiving transfer:', _error);
@@ -76,6 +78,7 @@ const TransferListComponent: React.FC<{ searchTerm: string }> = ({ searchTerm: p
           .eq('id', transferToDelete.id);
 
         if (error) throw error;
+        toast.success('Asset transfer deleted successfully!');
         setShowDeleteModal(false);
         setTransferToDelete(null);
         refetch();

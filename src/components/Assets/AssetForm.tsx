@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { X, Save } from 'lucide-react';
+import { toast } from 'react-hot-toast';
 import { useAuth } from '../../contexts/AuthContext';
 import { supabase, Asset } from '../../lib/supabase';
 import { NotificationService } from '../../lib/notificationService';
@@ -143,6 +144,8 @@ const AssetForm: React.FC<AssetFormProps> = ({ asset, onClose, onSave }) => {
               formData.name_of_supply
             );
           }
+
+          toast.success('Asset updated successfully!');
         } else {
           // Create new asset
           const { data: newAsset, error } = await supabase
@@ -156,7 +159,16 @@ const AssetForm: React.FC<AssetFormProps> = ({ asset, onClose, onSave }) => {
 
           // Create notification for all users about the creation
           if (profile?.id && savedAsset) {
+            await NotificationService.createNotificationForAllUsers(
+              profile.id,
+              'created',
+              'asset',
+              savedAsset.id,
+              formData.name_of_supply
+            );
           }
+
+          toast.success('Asset added successfully!');
         }
 
         onSave();
