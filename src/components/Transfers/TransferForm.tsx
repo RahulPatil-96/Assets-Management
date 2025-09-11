@@ -126,14 +126,6 @@ const TransferForm: React.FC<TransferFormProps> = ({ onClose, onSave }) => {
 
         if (error) throw error;
 
-        // Update asset's allocated_lab
-        const { error: updateError } = await supabase
-          .from('assets')
-          .update({ allocated_lab: formData.to_lab })
-          .eq('id', formData.asset_id);
-
-        if (updateError) throw updateError;
-
         onSave();
         onClose();
         toast.success('Asset transfer initiated successfully!');

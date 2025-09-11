@@ -1,6 +1,6 @@
 import jsPDF from 'jspdf';
 import autoTable, { RowInput } from 'jspdf-autotable';
-import { Asset, AssetIssue } from './supabase';
+import { Asset, AssetIssue, AssetTransfer } from './supabase';
 import { AssetAnalytics, IssueAnalytics } from './analyticsService';
 
 interface jsPDFAutoTable extends jsPDF {
@@ -287,6 +287,90 @@ export class PDFExportService {
     costData.forEach(([label, value]) => {
       yPos = handlePageBreak(doc, yPos);
       doc.text(`  ${label}: Rs.${value.toLocaleString()}`, 25, yPos);
+      yPos += 6;
+    });
+
+    addFooter(doc, pageNum);
+    doc.save(fileName);
+  }
+
+  static async exportTransfersToPDF(
+    transfers: AssetTransfer[],
+    analytics: any,
+    fileName = 'transfers-report.pdf',
+    labs: { [id: string]: string } = {}
+  ) {
+    const doc = this.getDoc();
+    const pageNum = 1;
+
+    addHeader(doc, 'Asset Transfer Report');
+
+    // Summary Section
+    doc.setFontSize(FONTS.section);
+    doc.text('Summary', 20, 45);
+
+    const summaryData: RowInput[] = [
+      ['Total Transfers', analytics.totalTransfers.toString()],
+      ['Pending Transfers', transfers.filter(t => t.status === 'pending').length.toString()],
+      ['Received Transfers', transfers.filter(t => t.status === 'received').length.toString()],
+    ];
+
+    autoTable(doc, {
+      startY: 50,
+      head: [['Metric', 'Value']],
+      body: summaryData,
+      theme: 'grid',
+      headStyles: { fillColor: [COLORS.primary[0], COLORS.primary[1], COLORS.primary[2]] },
+      alternateRowStyles: { fillColor: [245, 245, 245] },
+    });
+
+    let currentY = doc.lastAutoTable?.finalY ?? 70;
+
+    // Transfer Table
+    doc.setFontSize(FONTS.section);
+    doc.text('Transfer Details', 20, currentY + MARGINS.verticalSpacing);
+
+    const transfersData: RowInput[] = transfers.map(transfer => [
+      transfer.asset?.asset_id || 'Pending...',
+      transfer.asset?.name_of_supply || 'N/A',
+      labs[transfer.from_lab] || transfer.from_lab,
+      labs[transfer.to_lab] || transfer.to_lab,
+      transfer.status === 'received' ? 'Completed' : 'Pending',
+      transfer.initiator?.name || '',
+      new Date(transfer.initiated_at).toLocaleDateString(),
+    ]);
+
+    autoTable(doc, {
+      startY: currentY + 20,
+      head: [['Asset ID', 'Asset', 'From Lab', 'To Lab', 'Status', 'Initiated By', 'Initiated At']],
+      body: transfersData,
+      theme: 'grid',
+      headStyles: { fillColor: [COLORS.primary[0], COLORS.primary[1], COLORS.primary[2]] },
+      styles: { fontSize: 8 },
+      margin: { horizontal: MARGINS.horizontal },
+      alternateRowStyles: { fillColor: [245, 245, 245] },
+    });
+
+    currentY = doc.lastAutoTable?.finalY ?? currentY + 100;
+
+    // Analytics Overview
+    doc.setFontSize(FONTS.section);
+    doc.text('Analytics Overview', 20, currentY + 15);
+
+    let yPos = currentY + 25;
+
+    doc.setFontSize(FONTS.normal);
+    doc.text('Transfer Status Distribution:', 20, yPos);
+    yPos += 7;
+
+    const statusCounts = {
+      pending: transfers.filter(t => t.status === 'pending').length,
+      received: transfers.filter(t => t.status === 'received').length,
+    };
+
+    Object.entries(statusCounts).forEach(([status, count]) => {
+      yPos = handlePageBreak(doc, yPos);
+      doc.text(`  ${status.charAt(0).toUpperCase() + status.slice(1)}: ${count} transfers`, 25, yPos);
       yPos += 6;
     });
 

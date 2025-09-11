@@ -13,6 +13,7 @@ export type TransferStatus = 'pending' | 'approved' | 'received';
 
 /** User profile */
 export interface UserProfile {
+  email: string;
   id: string;
   auth_id: string;
   role: UserRole;
@@ -156,6 +157,16 @@ export interface CreateLabRequest {
   description?: string;
   location?: string;
   lab_identifier: string;
+  lab_assistant?: {
+    name: string;
+    email: string;
+    password: string;
+  };
+  lab_incharge?: {
+    name: string;
+    email: string;
+    password: string;
+  };
 }
 
 /** Update lab request */
@@ -174,6 +185,7 @@ export interface CreateLabIssueRequest {
   issue_type?: string;
   priority?: 'low' | 'medium' | 'high' | 'urgent';
   assigned_to?: string;
+  reported_by?: string;
 }
 
 /** Update lab issue request */

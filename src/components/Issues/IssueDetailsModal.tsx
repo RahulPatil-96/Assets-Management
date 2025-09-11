@@ -100,34 +100,71 @@ const IssueDetailsModal: React.FC<IssueDetailsModalProps> = ({ issue, onClose })
 
         <div className='p-6 space-y-6'>
           <div className='grid grid-cols-1 md:grid-cols-2 gap-6'>
-            <div className='space-y-2'>
-              <h3 className='text-sm font-medium text-gray-500 dark:text-gray-400'>
-                Issue Information
-              </h3>
-              <div className='space-y-1'>
+          <div className='space-y-2'>
+            <h3 className='text-sm font-medium text-gray-500 dark:text-gray-400'>
+              Issue Information
+            </h3>
+            <div className='space-y-1'>
+              <p className='text-sm'>
+                <span className='font-medium'>Status:</span>
+                <span
+                  className={`ml-2 px-2 py-1 rounded-full text-xs ${
+                    issue.status === 'resolved'
+                      ? 'bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-200'
+                      : issue.status === 'ticket_raised'
+                      ? 'bg-blue-100 text-blue-800 dark:bg-blue-900 dark:text-blue-200'
+                      : 'bg-red-100 text-red-800 dark:bg-red-900 dark:text-red-200'
+                    }`}
+                >
+                  {issue.status === 'resolved'
+                    ? 'Resolved'
+                    : issue.status === 'ticket_raised'
+                    ? 'Ticket Raised'
+                    : 'Open'}
+                </span>
+              </p>
+              {/* <p className='text-sm'>
+                <span className='font-medium'>Reported At:</span>{' '}
+                {new Date(issue.reported_at).toLocaleString()}
+              </p> */}
+              {issue.status === 'ticket_raised' && issue.updated_at && (
                 <p className='text-sm'>
-                  <span className='font-medium'>Status:</span>
-                  <span
-                    className={`ml-2 px-2 py-1 rounded-full text-xs ${issue.status === 'resolved'
-                        ? 'bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-200'
-                        : 'bg-red-100 text-red-800 dark:bg-red-900 dark:text-red-200'
-                      }`}
-                  >
-                    {issue.status === 'resolved' ? 'Resolved' : 'Open'}
-                  </span>
+                  <span className='font-medium'>Ticket Raised At:</span>{' '}
+                  {new Date(issue.updated_at).toLocaleString()}
                 </p>
+              )}
+              {/* {issue.resolved_at && (
                 <p className='text-sm'>
-                  <span className='font-medium'>Reported At:</span>{' '}
-                  {new Date(issue.reported_at).toLocaleString()}
+                  <span className='font-medium'>Resolved At:</span>{' '}
+                  {new Date(issue.resolved_at).toLocaleString()}
                 </p>
-                {issue.resolved_at && (
-                  <p className='text-sm'>
-                    <span className='font-medium'>Resolved At:</span>{' '}
-                    {new Date(issue.resolved_at).toLocaleString()}
-                  </p>
-                )}
+              )} */}
+              {/* Status History */}
+              <div className='mt-4'>
+                <h4 className='text-sm font-medium text-gray-500 dark:text-gray-400'>
+                  Status History
+                </h4>
+                <ul className='list-disc list-inside text-sm text-gray-700 dark:text-gray-300 max-h-40 overflow-y-auto'>
+                  <li>
+                    <span className='font-semibold'>Open</span> at{' '}
+                    {new Date(issue.reported_at).toLocaleString()}
+                  </li>
+                  {issue.updated_at && (
+                    <li>
+                      <span className='font-semibold'>Ticket Raised</span> at{' '}
+                      {new Date(issue.updated_at).toLocaleString()}
+                    </li>
+                  )}
+                  {issue.resolved_at && (
+                    <li>
+                      <span className='font-semibold'>Resolved</span> at{' '}
+                      {new Date(issue.resolved_at).toLocaleString()}
+                    </li>
+                  )}
+                </ul>
               </div>
             </div>
+          </div>
 
             <div className='space-y-2'>
               <h3 className='text-sm font-medium text-gray-500 dark:text-gray-400'>
@@ -188,6 +225,22 @@ const IssueDetailsModal: React.FC<IssueDetailsModalProps> = ({ issue, onClose })
                       <span className='font-medium'>Role:</span> {issue.resolver.role}
                     </p>
                   )}
+                </div>
+              </div>
+            )}
+
+            {issue.status === 'ticket_raised' && (
+              <div className='space-y-2'>
+                <h3 className='text-sm font-medium text-gray-500 dark:text-gray-400'>
+                  Ticket Details
+                </h3>
+                <div className='space-y-1'>
+                  <p className='text-sm'>
+                    <span className='font-medium'>Raised By:</span> {issue.reporter?.name || 'N/A'}
+                  </p>
+                  <p className='text-sm'>
+                    <span className='font-medium'>Role:</span> {issue.reporter?.role || 'N/A'}
+                  </p>
                 </div>
               </div>
             )}

@@ -8,6 +8,8 @@ import {
   ChevronLeft,
   ChevronRight,
   Building2,
+  Trash2,
+  Users,
 } from 'lucide-react';
 import { useAuth } from '../../contexts/AuthContext';
 
@@ -33,7 +35,9 @@ const Sidebar: React.FC<SidebarProps> = ({ activeTab, setActiveTab, isOpen }) =>
       HOD: [
         { id: 'alerts', label: 'System Alerts', icon: AlertTriangle },
         { id: 'transfers', label: 'Asset Transfers', icon: ArrowRightLeft },
+        { id: 'deleted-assets', label: 'Deleted Assets', icon: Trash2 },
         { id: 'lab-management', label: 'Lab Management', icon: Building2 },
+        { id: 'asset-types', label: 'Asset Types', icon: Settings },
       ],
       'Lab Assistant': [
         { id: 'issues', label: 'Issue Management', icon: AlertTriangle },

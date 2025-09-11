@@ -1,4 +1,4 @@
-import { Asset, AssetIssue, supabase } from './supabase';
+import { Asset, AssetIssue, AssetTransfer, supabase } from './supabase';
 import { AnalyticsService } from './analyticsService';
 import { PDFExportService } from './pdfExportService';
 import { ExcelExportService } from './excelExportService';
@@ -53,7 +53,44 @@ export class ExportService {
     }
   }
 
-  static generateFileName(type: 'assets' | 'issues', format: 'pdf' | 'excel'): string {
+  static async exportTransfers(
+    transfers: AssetTransfer[],
+    format: 'pdf' | 'excel',
+    fileName?: string,
+    labs?: { [id: string]: string }
+  ) {
+    // If labs mapping is not provided, fetch it
+    let labMapping = labs;
+    if (!labMapping) {
+      const { data: labsData, error } = await supabase.from('labs').select('id, name');
+
+      const fetchedLabMapping: { [id: string]: string } = {};
+      if (!error && labsData) {
+        labsData.forEach(lab => {
+          fetchedLabMapping[lab.id] = lab.name;
+        });
+      }
+      labMapping = fetchedLabMapping;
+    }
+
+    // TODO: Implement analytics for transfers if needed
+    // For now, create a dummy analytics object to satisfy PDF/Excel export functions
+    const analytics = {
+      totalTransfers: transfers.length,
+      byLab: {},
+      byType: {},
+      costByLab: {},
+      costByType: {},
+    };
+
+    if (format === 'pdf') {
+      await PDFExportService.exportTransfersToPDF(transfers, analytics, fileName, labMapping);
+    } else {
+      await ExcelExportService.exportTransfersToExcel(transfers, analytics, fileName, labMapping);
+    }
+  }
+
+  static generateFileName(type: 'assets' | 'issues' | 'transfers', format: 'pdf' | 'excel'): string {
     const timestamp = new Date().toISOString().slice(0, 10).replace(/-/g, '');
     return `${type}-report-${timestamp}.${format}`;
   }

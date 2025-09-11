@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
 import {
   LogOut,
@@ -8,7 +8,6 @@ import {
   Package,
   Moon,
   Sun,
-  ChevronDown,
   Menu,
 } from 'lucide-react';
 import NotificationBell from '../Notifications/NotificationBell';
@@ -34,6 +33,23 @@ const Navbar: React.FC<{
   const [selectedLabId, setSelectedLabId] = useState<string | null>(null);
   const [isUpdatingLab, setIsUpdatingLab] = useState(false);
   const [updateError, setUpdateError] = useState<string | null>(null);
+
+  const dropdownRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    function handleClickOutside(event: MouseEvent) {
+      if (
+        dropdownRef.current &&
+        !dropdownRef.current.contains(event.target as Node)
+      ) {
+        setIsProfileDropdownOpen(false);
+      }
+    }
+    document.addEventListener('mousedown', handleClickOutside);
+    return () => {
+      document.removeEventListener('mousedown', handleClickOutside);
+    };
+  }, []);
 
   const handleSearchChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const term = e.target.value;
@@ -142,7 +158,7 @@ const Navbar: React.FC<{
           </button>
 
           {/* Profile Section */}
-          <div className="relative">
+          <div className="relative" ref={dropdownRef}>
             <button
               onClick={() => setIsProfileDropdownOpen(!isProfileDropdownOpen)}
               className="flex items-center space-x-2 md:space-x-3 p-2 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-700 transition-colors"
@@ -201,7 +217,7 @@ const Navbar: React.FC<{
                 {(profile?.role === 'Lab Assistant' ||
                   profile?.role === 'Lab Incharge') && (
                   <div>
-                    <button
+                    {/* <button
                       onClick={() => setIsChangeLabOpen(!isChangeLabOpen)}
                       className="flex items-center justify-between w-full px-4 py-3 text-sm text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-700"
                     >
@@ -211,7 +227,7 @@ const Navbar: React.FC<{
                           isChangeLabOpen ? 'rotate-180' : ''
                         }`}
                       />
-                    </button>
+                    </button> */}
                     {isChangeLabOpen && (
                       <div className="max-h-48 overflow-y-auto border-t border-gray-200 dark:border-gray-700">
                         {labs.length === 0 && (

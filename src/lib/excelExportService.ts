@@ -1,5 +1,5 @@
 import * as ExcelJS from 'exceljs';
-import { Asset, AssetIssue } from './supabase';
+import { Asset, AssetIssue, AssetTransfer } from './supabase';
 import { AssetAnalytics, IssueAnalytics } from './analyticsService';
 
 export class ExcelExportService {
@@ -456,6 +456,129 @@ export class ExcelExportService {
     this.autoFormatColumns(sheet, 20);
 
     // Download file
+    await this.downloadWorkbook(workbook, fileName);
+  }
+
+  // Export Transfers Report
+  static async exportTransfersToExcel(
+    transfers: AssetTransfer[],
+    analytics: any,
+    fileName = 'transfers-report.xlsx',
+    labs: { [id: string]: string } = {}
+  ) {
+    const workbook = new ExcelJS.Workbook();
+
+    // --- Transfer Details Sheet ---
+    const sheet = workbook.addWorksheet('Transfer Details');
+
+    // Titles
+    this.addTitle(sheet, 'Asset Transfer Report', 1, 1, 7);
+    this.addSubtitle(sheet, `Generated on: ${new Date().toLocaleDateString()}`, 2, 1, 7);
+
+    // Summary
+    const summaryData: [string, string | number][] = [
+      ['Total Transfers', analytics.totalTransfers],
+      ['Pending Transfers', transfers.filter(t => t.status === 'pending').length],
+      ['Received Transfers', transfers.filter(t => t.status === 'received').length],
+    ];
+    this.addSummary(sheet, summaryData, 4);
+
+    // Add some space before next section
+    sheet.mergeCells('A9:G9');
+    const transferTitleCell = sheet.getCell('A9');
+    transferTitleCell.value = 'Transfer Details';
+    transferTitleCell.font = { size: 14, bold: true };
+
+    // Headers
+    const headers = ['Asset ID', 'Asset', 'From Lab', 'To Lab', 'Status', 'Initiated By', 'Initiated At'];
+    this.addHeaders(sheet, 11, headers, 'FF3B82F6'); // Blue
+
+    // Data rows
+    transfers.forEach((transfer, idx) => {
+      const rowNum = 12 + idx;
+      sheet.getCell(rowNum, 1).value = transfer.asset?.asset_id || 'Pending...';
+      sheet.getCell(rowNum, 2).value = transfer.asset?.name_of_supply || 'N/A';
+      sheet.getCell(rowNum, 3).value = labs[transfer.from_lab] || transfer.from_lab;
+      sheet.getCell(rowNum, 4).value = labs[transfer.to_lab] || transfer.to_lab;
+
+      // Status with color + icon
+      const statusCell = sheet.getCell(rowNum, 5);
+      if (transfer.status === 'received') {
+        statusCell.value = '✓ Completed';
+        statusCell.fill = {
+          type: 'pattern',
+          pattern: 'solid',
+          fgColor: { argb: 'FF22C55E' }, // green
+        };
+      } else {
+        statusCell.value = '⚠️ Pending';
+        statusCell.fill = {
+          type: 'pattern',
+          pattern: 'solid',
+          fgColor: { argb: 'FFF87171' }, // red
+        };
+      }
+      statusCell.font = { bold: true };
+      statusCell.alignment = { horizontal: 'center' };
+
+      sheet.getCell(rowNum, 6).value = transfer.initiator?.name || '';
+
+      // Initiated date
+      const initiatedDateCell = sheet.getCell(rowNum, 7);
+      initiatedDateCell.value = new Date(transfer.initiated_at);
+      initiatedDateCell.numFmt = 'mm/dd/yyyy';
+    });
+
+    // Auto format columns
+    this.applyZebraStriping(sheet, 12, 11 + transfers.length, 1, 7);
+    this.autoFormatColumns(sheet);
+
+    // Add analytics summary below data rows
+    let row = 12 + transfers.length + 2;
+
+    // Analytics Overview text block
+    sheet.getCell(`A${row}`).value = 'Analytics Overview';
+    sheet.getCell(`A${row}`).font = { size: 14, bold: true };
+    row++;
+
+    // Transfer Status Distribution
+    sheet.getCell(`A${row}`).value = 'Transfer Status Distribution:';
+    sheet.getCell(`A${row}`).font = { bold: true };
+    row++;
+
+    const statusCounts = {
+      pending: transfers.filter(t => t.status === 'pending').length,
+      received: transfers.filter(t => t.status === 'received').length,
+    };
+
+    Object.entries(statusCounts).forEach(([status, count]) => {
+      sheet.getCell(`A${row}`).value = `${status.charAt(0).toUpperCase() + status.slice(1)}: ${count} transfers`;
+      row++;
+    });
+
+    // Add some space before detailed tables
+    row += 2;
+
+    // Detailed Status Distribution Table
+    sheet.getCell(`A${row}`).value = 'Transfer Status Distribution';
+    sheet.getCell(`A${row}`).font = { size: 14, bold: true };
+    row++;
+
+    sheet.getCell(`A${row}`).value = 'Status';
+    sheet.getCell(`B${row}`).value = 'Count';
+    sheet.getRow(row).font = { bold: true };
+    sheet.getRow(row).alignment = { horizontal: 'center' };
+    row++;
+
+    Object.entries(statusCounts).forEach(([status, count]) => {
+      sheet.getCell(`A${row}`).value = status.charAt(0).toUpperCase() + status.slice(1);
+      sheet.getCell(`B${row}`).value = count;
+      row++;
+    });
+
+    this.autoFormatColumns(sheet);
+
+    // Download the file
     await this.downloadWorkbook(workbook, fileName);
   }
 }

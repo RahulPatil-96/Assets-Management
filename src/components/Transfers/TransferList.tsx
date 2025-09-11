@@ -1,6 +1,6 @@
 import React, { useState, useCallback } from 'react';
 import { useQuery } from '@tanstack/react-query';
-import { ArrowRightLeft, Plus, CheckCircle, Clock, Eye, Trash2 } from 'lucide-react';
+import { ArrowRightLeft, Plus, CheckCircle, Clock, Eye, Trash2, Filter } from 'lucide-react';
 import { toast } from 'react-hot-toast';
 import { useAuth } from '../../contexts/AuthContext';
 import { supabase, AssetTransfer } from '../../lib/supabase';
@@ -9,9 +9,18 @@ import TransferDetailsModalWithErrorBoundary from './TransferDetailsModalWithErr
 import { ListItemSkeleton } from '../Layout/LoadingSkeleton';
 import Button from '../Button';
 import ConfirmationModal from '../Layout/ConfirmationModal';
+import FilterDropdown from '../FilterDropdown';
+import DateRangePicker from '../DateRangePicker';
+import ExportButton from '../Export/ExportButton';
 
 const TransferListComponent: React.FC<{ searchTerm: string }> = ({ searchTerm: propSearchTerm }) => {
   const { profile } = useAuth();
+  const [fromDate, setFromDate] = useState<string>('');
+  const [toDate, setToDate] = useState<string>('');
+  const [filterStatus, setFilterStatus] = useState('all');
+  const [filterLab, setFilterLab] = useState('all');
+  const [filterType, setFilterType] = useState('all');
+  const [filterConsumable, setFilterConsumable] = useState('all');
   const [showForm, setShowForm] = useState(false);
   const [viewingTransfer, setViewingTransfer] = useState<AssetTransfer | null>(null);
   const [showDeleteModal, setShowDeleteModal] = useState(false);
@@ -24,7 +33,7 @@ const TransferListComponent: React.FC<{ searchTerm: string }> = ({ searchTerm: p
       .select(
         `
         *,
-        asset:assets(name_of_supply, sr_no, asset_id, allocated_lab),
+        asset:assets(name_of_supply, sr_no, asset_id, allocated_lab, is_consumable, asset_type),
         initiator:initiated_by(name, role),
         receiver:received_by(name, role),
         from_lab_data:from_lab(name, lab_identifier),
@@ -49,19 +58,42 @@ const TransferListComponent: React.FC<{ searchTerm: string }> = ({ searchTerm: p
   const handleReceive = useCallback(
     async (transferId: string) => {
       try {
+        // Get the transfer details to know the asset_id and to_lab
+        const { data: transferData, error: fetchError } = await supabase
+          .from('asset_transfers')
+          .select('asset_id, to_lab')
+          .eq('id', transferId)
+          .single();
+
+        if (fetchError) throw fetchError;
+
+        // Update the transfer status to received
         const { error } = await supabase
           .from('asset_transfers')
           .update({
             status: 'received',
             received_by: profile?.id,
+            received_at: new Date().toISOString(),
           })
           .eq('id', transferId);
 
         if (error) throw error;
+
+        // Update the asset's allocated_lab - the database trigger will automatically update the asset_id
+        const { error: updateAssetError } = await supabase
+          .from('assets')
+          .update({
+            allocated_lab: transferData.to_lab
+          })
+          .eq('id', transferData.asset_id);
+
+        if (updateAssetError) throw updateAssetError;
+
         toast.success('Asset transfer received successfully!');
         refetch();
       } catch (_error) {
-        // console.error('Error receiving transfer:', _error);
+        console.error('Error receiving transfer:', _error);
+        toast.error('Failed to receive asset transfer');
       }
     },
     [profile?.id, refetch]
@@ -126,19 +158,45 @@ const TransferListComponent: React.FC<{ searchTerm: string }> = ({ searchTerm: p
     [profile?.role, profile?.lab_id]
   );
 
-  const filteredTransfers = transfers
-    .filter(transfer => {
-      const matchesSearch =
-        propSearchTerm === '' ||
-        (transfer.asset?.asset_id &&
-          transfer.asset.asset_id.toString().toLowerCase().includes(propSearchTerm.toLowerCase()));
-      return matchesSearch;
-    })
-    .sort((a, b) => {
-      if (a.status === 'pending' && b.status === 'received') return -1;
-      if (a.status === 'received' && b.status === 'pending') return 1;
-      return new Date(b.initiated_at).getTime() - new Date(a.initiated_at).getTime();
-    });
+  const filteredTransfers = React.useMemo(
+    () =>
+      transfers
+        .filter(transfer => {
+          const matchesSearch =
+            propSearchTerm === '' ||
+            (transfer.asset?.asset_id &&
+              transfer.asset.asset_id.toString().toLowerCase().includes(propSearchTerm.toLowerCase())) ||
+            (transfer.asset?.name_of_supply &&
+              transfer.asset.name_of_supply.toLowerCase().includes(propSearchTerm.toLowerCase()));
+
+          const matchesStatus = filterStatus === 'all' || transfer.status === filterStatus;
+          const matchesLab =
+            filterLab === 'all' ||
+            transfer.from_lab === filterLab ||
+            transfer.to_lab === filterLab;
+          const matchesType =
+            filterType === 'all' ||
+            (transfer.asset?.name_of_supply?.toLowerCase().includes(filterType.toLowerCase()));
+
+          const matchesConsumable =
+            filterConsumable === 'all' ||
+            (filterConsumable === 'consumable' && transfer.asset?.is_consumable) ||
+            (filterConsumable === 'non-consumable' && !transfer.asset?.is_consumable);
+
+          const transferDate = new Date(transfer.initiated_at);
+          const from = new Date(fromDate);
+          const to = new Date(toDate);
+          const matchesDate = (!fromDate || transferDate >= from) && (!toDate || transferDate <= to);
+
+          return matchesSearch && matchesStatus && matchesLab && matchesType && matchesConsumable && matchesDate;
+        })
+        .sort((a, b) => {
+          if (a.status === 'pending' && b.status === 'received') return -1;
+          if (a.status === 'received' && b.status === 'pending') return 1;
+          return new Date(b.initiated_at).getTime() - new Date(a.initiated_at).getTime();
+        }),
+    [transfers, propSearchTerm, filterStatus, filterLab, filterType, filterConsumable, fromDate, toDate]
+  );
 
   if (isLoading) {
     return (
@@ -157,15 +215,94 @@ const TransferListComponent: React.FC<{ searchTerm: string }> = ({ searchTerm: p
         <h1 className='text-2xl font-bold text-gray-900 dark:text-gray-100 mb-4 sm:mb-0'>
           Asset Transfers
         </h1>
-        {profile?.role === 'Lab Incharge' && (
-          <Button
-            onClick={() => setShowForm(true)}
-            variant="view" // or "primary" if you want blue; using "view" here for purple theme
-            icon={<Plus className="w-4 h-4" />}
-          >
-            Initiate Transfer
-          </Button>
-        )}
+        <div className='flex items-center space-x-4'>
+          <ExportButton
+            data={filteredTransfers}
+            type='transfers'
+            disabled={filteredTransfers.length === 0}
+          />
+          {profile?.role === 'Lab Incharge' && (
+            <Button
+              onClick={() => setShowForm(true)}
+              variant="view" // or "primary" if you want blue; using "view" here for purple theme
+              icon={<Plus className="w-4 h-4" />}
+            >
+              Initiate Transfer
+            </Button>
+          )}
+        </div>
+      </div>
+
+      {/* Filters */}
+      <div className='bg-white dark:bg-gray-800 rounded-lg shadow-sm border border-gray-200 dark:border-gray-700 p-4 mb-4'>
+        <div className='flex gap-4 overflow-x-auto'>
+          <div className='flex items-center gap-2 text-gray-600 dark:text-gray-300 font-medium'>
+            <Filter className='w-4 h-4' />
+            <span>Filters:</span>
+          </div>
+          <FilterDropdown
+            label='Status:'
+            value={filterStatus}
+            onChange={setFilterStatus}
+            options={[
+              { value: 'all', label: 'All Status' },
+              { value: 'pending', label: 'Pending' },
+              { value: 'received', label: 'Received' },
+            ]}
+            className='w-full sm:w-auto min-w-[100px]'
+          />
+          <FilterDropdown
+            label='Lab:'
+            value={filterLab}
+            onChange={setFilterLab}
+            options={[
+              { value: 'all', label: 'All Labs' },
+              ...Array.from(
+                new Set([
+                  ...transfers.map(transfer => transfer.from_lab).filter(Boolean),
+                  ...transfers.map(transfer => transfer.to_lab).filter(Boolean)
+                ])
+              ).map(labId => ({
+                value: labId as string,
+                label: labId as string,
+              })),
+            ]}
+            className='w-full sm:w-auto min-w-[100px]'
+          />
+          <FilterDropdown
+            label='Type:'
+            value={filterType}
+            onChange={setFilterType}
+            options={[
+              { value: 'all', label: 'All Types' },
+              ...Array.from(
+                new Set(transfers.map(transfer => transfer.asset?.name_of_supply).filter(Boolean))
+              ).map(type => ({
+                value: type as string,
+                label: type as string,
+              })),
+            ]}
+            className='w-full sm:w-auto min-w-[100px]'
+          />
+          <FilterDropdown
+            label='Consumable:'
+            value={filterConsumable}
+            onChange={setFilterConsumable}
+            options={[
+              { value: 'all', label: 'All Types' },
+              { value: 'consumable', label: 'Consumable' },
+              { value: 'non-consumable', label: 'Non-Consumable' },
+            ]}
+            className='w-full sm:w-auto min-w-[150px]'
+          />
+          <DateRangePicker
+            fromDate={fromDate}
+            onFromDateChange={setFromDate}
+            toDate={toDate}
+            onToDateChange={setToDate}
+            className='w-full sm:w-auto min-w-[200px]'
+          />
+        </div>
       </div>
 
       <div className='bg-white dark:bg-gray-800 rounded-lg shadow-sm border border-gray-200 dark:border-gray-700 max-h-[calc(100vh-200px)] overflow-y-auto'>

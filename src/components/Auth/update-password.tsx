@@ -3,7 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import { Button } from '../Button';
 import { Input } from '../Input';
 import { Eye, EyeOff, KeySquare, CheckCircle } from 'lucide-react';
-import { supabase } from '../../lib/supabase';
+import { PasswordService } from '../../lib/passwordService';
 
 export function UpdatePassword() {
   const navigate = useNavigate();
@@ -15,46 +15,24 @@ export function UpdatePassword() {
   const [showConfirmPassword, setShowConfirmPassword] = useState<boolean>(false);
   const [success, setSuccess] = useState<boolean>(false);
 
-  const handleSubmit = (e: FormEvent) => {
+  const handleSubmit = async (e: FormEvent) => {
     e.preventDefault();
-
-    if (!password) {
-      setError('Password is required');
-      return;
-    }
-
-    if (password.length < 6) {
-      setError('Password must be at least 6 characters long');
-      return;
-    }
-
-    if (password !== confirmPassword) {
-      setError('Passwords do not match');
-      return;
-    }
 
     setError('');
     setLoading(true);
 
-    // Call Supabase to update the password
-    supabase.auth
-      .updateUser({ password })
-      .then(({ error }) => {
-        setLoading(false);
-        if (error) {
-          setError(error.message);
-        } else {
-          // Show success state
-          setSuccess(true);
-          setTimeout(() => {
-            navigate('/signin');
-          }, 2000);
-        }
-      })
-      .catch((err: Error) => {
-        setLoading(false);
-        setError(err.message);
-      });
+    const result = await PasswordService.updateCurrentUserPassword(password);
+
+    setLoading(false);
+
+    if (result.success) {
+      setSuccess(true);
+      setTimeout(() => {
+        navigate('/signin');
+      }, 2000);
+    } else {
+      setError(result.error || 'An unexpected error occurred');
+    }
   };
 
   if (success) {

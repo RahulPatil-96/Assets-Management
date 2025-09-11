@@ -1,18 +1,17 @@
-import { supabase } from './supabase';
+import { supabase, supabaseAdmin } from './supabase';
+import { PasswordService } from './passwordService';
 import {
   Lab,
-  LabStaff,
   LabIssue,
   CreateLabRequest,
   UpdateLabRequest,
   CreateLabIssueRequest,
   UpdateLabIssueRequest,
-  AssignStaffRequest,
   LabFilters,
   LabIssueFilters,
-  type LabAccess,
-} from '../types/lab';
-import { Asset } from '../types';
+  LabAccess,
+  Asset,
+} from '../types';
 
 // Lab Management Service
 export class LabService {
@@ -29,10 +28,7 @@ export class LabService {
     }
 
     // Removed incharge_id filter as labs no longer have incharge
-
-    if (filters?.has_open_issues) {
-      query = query.gt('open_issues_count', 0);
-    }
+    // Removed has_open_issues filter as open_issues_count column doesn't exist
 
     const sortBy = filters?.sort_by || 'name';
     const sortOrder = filters?.sort_order || 'asc';
@@ -73,10 +69,114 @@ export class LabService {
   }
 
   static async createLab(lab: CreateLabRequest): Promise<Lab> {
-    const { data, error } = await supabase.from('labs').insert(lab).select().single();
+    // Create the lab first
+    const { data: labData, error: labError } = await supabase
+      .from('labs')
+      .insert({
+        name: lab.name,
+        description: lab.description,
+        location: lab.location,
+        lab_identifier: lab.lab_identifier
+      })
+      .select()
+      .single();
 
-    if (error) throw error;
-    return data;
+    if (labError) throw labError;
+
+    // Helper function to create user account and profile
+    const createUserAccount = async (user: { name: string; email: string; password: string }, role: string) => {
+      if (!user.name || !user.email || !user.password) {
+        throw new Error(`Missing required fields for ${role} creation`);
+      }
+
+      // Validate email format
+      if (!PasswordService.validateEmail(user.email)) {
+        throw new Error(`Invalid email format for ${role}: ${user.email}`);
+      }
+
+      // Validate password strength
+      const passwordValidation = PasswordService.validatePassword(user.password);
+      if (!passwordValidation.isValid) {
+        throw new Error(`Password validation failed for ${role}: ${passwordValidation.errors.join(', ')}`);
+      }
+
+      // Check if user already exists by email
+      const { data: existingUser, error: existingUserError } = await supabase
+        .from('user_profiles')
+        .select('id')
+        .eq('email', user.email)
+        .single();
+
+      if (existingUserError && existingUserError.code !== 'PGRST116') { // PGRST116 = no rows found
+        throw existingUserError;
+      }
+      if (existingUser) {
+        throw new Error(`User with email ${user.email} already exists`);
+      }
+
+      // Create auth user without email confirmation for lab staff created by HOD
+      let userId: string | null = null;
+
+      if (!supabaseAdmin) {
+        throw new Error('Supabase admin client not configured. Please set VITE_SUPABASE_SERVICE_ROLE_KEY environment variable.');
+      }
+
+      try {
+        const { data: authData, error: authError } = await supabaseAdmin.auth.admin.createUser({
+          email: user.email,
+          password: user.password,
+          email_confirm: true, // Auto-confirm the email
+          user_metadata: {
+            name: user.name,
+            role: role,
+            lab_id: labData.id
+          }
+        });
+
+        if (authError) throw authError;
+        userId = authData?.user?.id || null;
+      } catch (adminError) {
+        console.error('Admin API failed:', (adminError as Error).message);
+        throw new Error(`Failed to create user account: ${(adminError as Error).message}`);
+      }
+
+      if (!userId) {
+        throw new Error('Failed to get user ID after creating auth user');
+      }
+
+      // Create user profile
+      const { error: profileError } = await supabase.rpc('create_user_profile', {
+        p_auth_id: userId,
+        p_email: user.email,
+        p_role: role,
+        p_name: user.name,
+        p_lab_id: labData.id
+      });
+
+      if (profileError) throw profileError;
+    };
+
+    // Create lab assistant account if provided
+    if (lab.lab_assistant) {
+      try {
+        await createUserAccount(lab.lab_assistant, 'Lab Assistant');
+      } catch (error) {
+        console.error('Failed to create lab assistant account:', error);
+        throw new Error(`Failed to create lab assistant account: ${error instanceof Error ? error.message : error}`);
+      }
+    }
+
+    // Create lab incharge account if provided
+    if (lab.lab_incharge) {
+      try {
+        await createUserAccount(lab.lab_incharge, 'Lab Incharge');
+      } catch (error) {
+        console.error('Failed to create lab incharge account:', error);
+        throw new Error(`Failed to create lab incharge account: ${error instanceof Error ? error.message : error}`);
+      }
+    }
+
+    return labData;
   }
 
   static async updateLab(id: string, updates: UpdateLabRequest): Promise<Lab> {
@@ -92,77 +192,44 @@ export class LabService {
   }
 
   static async deleteLab(id: string): Promise<void> {
+    // First, get all user profiles associated with this lab
+    const { data: labUsers, error: usersError } = await supabase
+      .from('user_profiles')
+      .select('id')
+      .eq('lab_id', id);
+
+    if (usersError) throw usersError;
+
+    // Delete each user profile using the database function for proper cleanup
+    if (labUsers && labUsers.length > 0) {
+      for (const user of labUsers) {
+        const { error: deleteUserError } = await supabase.rpc('delete_user_profile', {
+          p_user_id: user.id
+        });
+
+        if (deleteUserError) throw deleteUserError;
+      }
+    }
+
+    // Finally, delete the lab
     const { error } = await supabase.from('labs').delete().eq('id', id);
 
     if (error) throw error;
   }
 
-  // Lab Staff Management
-  static async getLabStaff(labId: string): Promise<LabStaff[]> {
-    const { data, error } = await supabase
-      .from('lab_staff')
-      .select(
-        `
-        *,
-        user:user_profiles(id, name, role)
-      `
-      )
-      .eq('lab_id', labId)
-      .order('assigned_at', { ascending: false });
 
-    if (error) throw error;
-    return data || [];
-  }
 
-  static async assignStaff(labId: string, staff: AssignStaffRequest): Promise<LabStaff> {
-    const { data, error } = await supabase
-      .from('lab_staff')
-      .insert({
-        lab_id: labId,
-        user_id: staff.user_id,
-        role: staff.role,
-      })
-      .select()
-      .single();
-
-    if (error) throw error;
-    return data;
-  }
-
-  static async removeStaff(labId: string, userId: string): Promise<void> {
-    const { error } = await supabase
-      .from('lab_staff')
-      .delete()
-      .eq('lab_id', labId)
-      .eq('user_id', userId);
-
-    if (error) throw error;
-  }
-
-  static async updateStaffRole(labId: string, userId: string, role: string): Promise<LabStaff> {
-    const { data, error } = await supabase
-      .from('lab_staff')
-      .update({ role })
-      .eq('lab_id', labId)
-      .eq('user_id', userId)
-      .select()
-      .single();
-
-    if (error) throw error;
-    return data;
-  }
-
-  // Lab Issues Management
+  // Lab Issues Management (using asset_issues table)
   static async getLabIssues(filters?: LabIssueFilters): Promise<LabIssue[]> {
-    let query = supabase.from('lab_issues').select(`
+    let query = supabase.from('asset_issues').select(`
         *,
-        lab:labs(id, name),
+        asset:assets(id, name_of_supply, lab_id),
         reported_by_user:user_profiles!reported_by(id, name),
         assigned_to_user:user_profiles!assigned_to(id, name)
       `);
 
     if (filters?.lab_id) {
-      query = query.eq('lab_id', filters.lab_id);
+      query = query.eq('asset.lab_id', filters.lab_id);
     }
 
     if (filters?.status) {
@@ -187,16 +254,33 @@ export class LabService {
 
     const { data, error } = await query;
     if (error) throw error;
-    return data || [];
+
+    // Transform asset_issues to LabIssue format
+    return (data || []).map(issue => ({
+      id: issue.id,
+      lab_id: issue.asset?.lab_id,
+      title: issue.title,
+      description: issue.description,
+      issue_type: issue.issue_type,
+      priority: issue.priority,
+      reported_by: issue.reported_by,
+      reported_by_name: issue.reported_by_user?.name,
+      assigned_to: issue.assigned_to,
+      assigned_to_name: issue.assigned_to_user?.name,
+      status: issue.status,
+      created_at: issue.created_at,
+      updated_at: issue.updated_at,
+      remark: issue.remark
+    }));
   }
 
   static async getLabIssue(id: string): Promise<LabIssue | null> {
     const { data, error } = await supabase
-      .from('lab_issues')
+      .from('asset_issues')
       .select(
         `
         *,
-        lab:labs(id, name),
+        asset:assets(id, name_of_supply, lab_id),
         reported_by_user:user_profiles!reported_by(id, name),
         assigned_to_user:user_profiles!assigned_to(id, name)
       `
@@ -205,14 +289,67 @@ export class LabService {
       .single();
 
     if (error) throw error;
-    return data;
+
+    if (!data) return null;
+
+    // Transform asset_issue to LabIssue format
+    return {
+      id: data.id,
+      lab_id: data.asset?.lab_id,
+      title: data.title,
+      description: data.description,
+      issue_type: data.issue_type,
+      priority: data.priority,
+      reported_by: data.reported_by,
+      reported_by_name: data.reported_by_user?.name,
+      assigned_to: data.assigned_to,
+      assigned_to_name: data.assigned_to_user?.name,
+      status: data.status,
+      created_at: data.created_at,
+      updated_at: data.updated_at,
+      remark: data.remark
+    };
   }
 
   static async createLabIssue(issue: CreateLabIssueRequest): Promise<LabIssue> {
-    const { data, error } = await supabase.from('lab_issues').insert(issue).select().single();
+    // Note: This method now creates asset issues instead of lab issues
+    // The asset_id should be provided in the issue data
+    const issueData = {
+      asset_id: (issue as any).asset_id,
+      title: issue.title,
+      description: issue.description,
+      issue_type: issue.issue_type,
+      priority: issue.priority,
+      assigned_to: issue.assigned_to,
+      reported_by: issue.reported_by
+    };
+
+    const { data, error } = await supabase.from('asset_issues').insert(issueData).select(`
+      *,
+      asset:assets(id, name_of_supply, lab_id),
+      reported_by_user:user_profiles!reported_by(id, name),
+      assigned_to_user:user_profiles!assigned_to(id, name)
+    `).single();
 
     if (error) throw error;
-    return data;
+
+    // Transform to LabIssue format
+    return {
+      id: data.id,
+      lab_id: data.asset?.lab_id,
+      title: data.title,
+      description: data.description,
+      issue_type: data.issue_type,
+      priority: data.priority,
+      reported_by: data.reported_by,
+      reported_by_name: data.reported_by_user?.name,
+      assigned_to: data.assigned_to,
+      assigned_to_name: data.assigned_to_user?.name,
+      status: data.status,
+      created_at: data.created_at,
+      updated_at: data.updated_at,
+      remark: data.remark
+    };
   }
 
   static async updateLabIssue(id: string, updates: UpdateLabIssueRequest): Promise<LabIssue> {
@@ -280,6 +417,82 @@ export class LabService {
     if (error) throw error;
     return data || false;
   }
+
+  // Lab Staff Management
+  static async getLabStaff(labId: string): Promise<any[]> {
+    const { data, error } = await supabase
+      .from('user_profiles')
+      .select('*')
+      .eq('lab_id', labId)
+      .in('role', ['Lab Assistant', 'Lab Incharge']);
+
+    if (error) throw error;
+    return data || [];
+  }
+
+  static async updateLabStaff(userId: string, updates: { name?: string; email?: string; password?: string }): Promise<void> {
+    // If password is provided, update auth user password using PasswordService
+    if (updates.password) {
+      try {
+        // Get the auth_id for the user
+        const { data: userProfile, error: profileError } = await supabase
+          .from('user_profiles')
+          .select('auth_id')
+          .eq('id', userId)
+          .single();
+
+        if (profileError) throw profileError;
+
+        if (!userProfile?.auth_id) {
+          throw new Error('User auth ID not found');
+        }
+
+        // Use PasswordService to update password (assuming HOD role for lab staff updates)
+        const passwordResult = await PasswordService.updateUserPassword(userProfile.auth_id, updates.password, 'HOD');
+
+        if (!passwordResult.success) {
+          throw new Error(passwordResult.error || 'Failed to update password');
+        }
+      } catch (passwordError) {
+        console.error('Password update failed:', passwordError);
+        throw new Error('Failed to update password. Please try again or contact administrator.');
+      }
+
+      // Remove password from updates to avoid updating user_profiles table with it
+      delete updates.password;
+    }
+
+    // Update other profile fields
+    if (Object.keys(updates).length > 0) {
+      const { error } = await supabase
+        .from('user_profiles')
+        .update(updates)
+        .eq('id', userId);
+
+      if (error) throw error;
+    }
+  }
+
+  static async deleteLabStaff(userId: string): Promise<void> {
+    // First get the auth_id to delete from auth.users
+    const { error: profileError } = await supabase
+      .from('user_profiles')
+      .select('auth_id')
+      .eq('id', userId)
+      .single();
+
+    if (profileError) throw profileError;
+
+    // Delete from user_profiles (this will cascade to auth.users due to foreign key)
+    const { error } = await supabase
+      .from('user_profiles')
+      .delete()
+      .eq('id', userId);
+
+    if (error) throw error;
+  }
+
+
 }
 
 // Permission checking function (to be created in database)

@@ -6,6 +6,7 @@ import { supabase, Asset } from '../../lib/supabase';
 import { NotificationService } from '../../lib/notificationService';
 import { LabService } from '../../lib/labService';
 import Button from '../Button';
+import { fetchAssetTypes, AssetType } from '../../lib/assetTypeService';
 
 interface AssetFormProps {
   asset?: Asset | null;
@@ -16,8 +17,8 @@ interface AssetFormProps {
 const AssetForm: React.FC<AssetFormProps> = ({ asset, onClose, onSave }) => {
   const { profile } = useAuth();
   const [loading, setLoading] = useState(false);
-  // Removed unused labs, setLabs, and fetchingLab
   const [labOptions, setLabOptions] = useState<{ id: string; name: string }[]>([]);
+  const [assetTypes, setAssetTypes] = useState<AssetType[]>([]);
   const [formData, setFormData] = useState({
     name_of_supply: '',
     asset_type: 'other',
@@ -25,6 +26,7 @@ const AssetForm: React.FC<AssetFormProps> = ({ asset, onClose, onSave }) => {
     description: '',
     rate: 0,
     remark: '',
+    is_consumable: false,
     allocated_lab: asset?.allocated_lab || '',
     date: new Date().toISOString().split('T')[0],
   });
@@ -32,7 +34,6 @@ const AssetForm: React.FC<AssetFormProps> = ({ asset, onClose, onSave }) => {
   useEffect(() => {
     const fetchLabId = async () => {
       if (asset && asset.allocated_lab) {
-        // Editing asset, keep its allocated_lab
         setFormData(prev => ({
           ...prev,
           allocated_lab: asset.allocated_lab,
@@ -50,19 +51,19 @@ const AssetForm: React.FC<AssetFormProps> = ({ asset, onClose, onSave }) => {
           } else {
             setFormData(prev => ({
               ...prev,
-              allocated_lab: '', // No valid lab found, show 'Select Lab'
+              allocated_lab: '',
             }));
           }
         } catch (_error: unknown) {
           setFormData(prev => ({
             ...prev,
-            allocated_lab: '', // On error, show 'Select Lab'
+            allocated_lab: '',
           }));
         }
       } else {
         setFormData(prev => ({
           ...prev,
-          allocated_lab: '', // No lab in profile, show 'Select Lab'
+          allocated_lab: '',
         }));
       }
     };
@@ -71,7 +72,6 @@ const AssetForm: React.FC<AssetFormProps> = ({ asset, onClose, onSave }) => {
       try {
         const labsData = await LabService.getLabs();
 
-        // For Lab Assistants, only show their assigned lab
         if (profile?.role === 'Lab Assistant' && profile?.lab_id) {
           const userLab = labsData.find(
             lab =>
@@ -85,7 +85,6 @@ const AssetForm: React.FC<AssetFormProps> = ({ asset, onClose, onSave }) => {
             setLabOptions([]);
           }
         } else {
-          // For other roles, show all labs
           setLabOptions(labsData.map(lab => ({ id: lab.id, name: lab.name })));
         }
       } catch (_error) {
@@ -93,8 +92,19 @@ const AssetForm: React.FC<AssetFormProps> = ({ asset, onClose, onSave }) => {
       }
     };
 
+    const fetchAssetTypesData = async () => {
+      try {
+        const types = await fetchAssetTypes();
+        setAssetTypes(types);
+      } catch (error) {
+        // console.error('Error fetching asset types:', error);
+      }
+    };
+
     fetchLabs();
     fetchLabId();
+    fetchAssetTypesData();
+
     if (asset) {
       setFormData({
         name_of_supply: asset.name_of_supply,
@@ -103,6 +113,7 @@ const AssetForm: React.FC<AssetFormProps> = ({ asset, onClose, onSave }) => {
         description: asset.description || '',
         rate: asset.rate,
         remark: asset.remark || '',
+        is_consumable: asset.is_consumable || false,
         allocated_lab: asset.allocated_lab,
         date: asset.date,
       });
@@ -123,7 +134,6 @@ const AssetForm: React.FC<AssetFormProps> = ({ asset, onClose, onSave }) => {
         let savedAsset: Asset | null = null;
 
         if (asset) {
-          // Update existing asset
           const { data: updatedAsset, error } = await supabase
             .from('assets')
             .update(data)
@@ -134,7 +144,6 @@ const AssetForm: React.FC<AssetFormProps> = ({ asset, onClose, onSave }) => {
           if (error) throw error;
           savedAsset = updatedAsset;
 
-          // Create notification for all users about the update
           if (profile?.id) {
             await NotificationService.createNotificationForAllUsers(
               profile.id,
@@ -147,7 +156,6 @@ const AssetForm: React.FC<AssetFormProps> = ({ asset, onClose, onSave }) => {
 
           toast.success('Asset updated successfully!');
         } else {
-          // Create new asset
           const { data: newAsset, error } = await supabase
             .from('assets')
             .insert(data)
@@ -157,7 +165,6 @@ const AssetForm: React.FC<AssetFormProps> = ({ asset, onClose, onSave }) => {
           if (error) throw error;
           savedAsset = newAsset;
 
-          // Create notification for all users about the creation
           if (profile?.id && savedAsset) {
             await NotificationService.createNotificationForAllUsers(
               profile.id,
@@ -194,9 +201,10 @@ const AssetForm: React.FC<AssetFormProps> = ({ asset, onClose, onSave }) => {
   const handleChange = useCallback(
     (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement>) => {
       const { name, value, type } = e.target;
+      const checked = (e.target as HTMLInputElement).checked;
       setFormData(prev => ({
         ...prev,
-        [name]: type === 'number' ? parseFloat(value) || 0 : value,
+        [name]: type === 'number' ? parseFloat(value) || 0 : type === 'checkbox' ? checked : value,
       }));
     },
     []
@@ -239,18 +247,11 @@ const AssetForm: React.FC<AssetFormProps> = ({ asset, onClose, onSave }) => {
                 className='w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent dark:bg-gray-700 dark:text-gray-200'
                 required
               >
-                <option value='cpu'>CPU</option>
-                <option value='printer'>Printer</option>
-                <option value='network'>Network Equipment</option>
-                <option value='peripheral'>Peripheral</option>
-                <option value='microcontroller'>Microcontroller</option>
-                <option value='monitor'>Monitor</option>
-                <option value='mouse'>Mouse</option>
-                <option value='keyboard'>Keyboard</option>
-                <option value='scanner'>Scanner</option>
-                <option value='projector'>Projector</option>
-                <option value='laptop'>Laptop</option>
-                <option value='other'>Other</option>
+                {assetTypes.map(type => (
+                  <option key={type.id} value={type.identifier}>
+                    {type.name}
+                  </option>
+                ))}
               </select>
             </div>
 
@@ -344,6 +345,20 @@ const AssetForm: React.FC<AssetFormProps> = ({ asset, onClose, onSave }) => {
               rows={3}
               className='w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent dark:bg-gray-700 dark:text-gray-200'
             />
+          </div>
+
+          <div className="flex items-center space-x-2">
+            <input
+              type="checkbox"
+              id="is_consumable"
+              name="is_consumable"
+              checked={formData.is_consumable}
+              onChange={handleChange}
+              className="h-4 w-4 text-blue-600 focus:ring-blue-500 border-gray-300 rounded"
+            />
+            <label htmlFor="is_consumable" className="text-sm font-medium text-gray-700 dark:text-gray-300">
+              Consumable Asset
+            </label>
           </div>
 
           <div className='flex justify-end space-x-3 pt-4'>

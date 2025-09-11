@@ -7,6 +7,7 @@ import {
   Eye,
   BarChart3,
   Filter,
+  Tag
 } from 'lucide-react';
 import { toast } from 'react-hot-toast';
 import { useAuth } from '../../contexts/AuthContext';
@@ -27,12 +28,15 @@ const IssueListComponent: React.FC<{ searchTerm: string }> = ({ searchTerm: prop
   const [filterStatus, setFilterStatus] = useState('all');
   const [filterLab, setFilterLab] = useState('all');
   const [filterType, setFilterType] = useState('all');
+  const [filterConsumable, setFilterConsumable] = useState('all');
   const [showForm, setShowForm] = useState(false);
   const [viewingIssue, setViewingIssue] = useState<AssetIssue | null>(null);
   const [activeTab, setActiveTab] = useState<'list' | 'analytics'>('list');
   const [resolvingIssue, setResolvingIssue] = useState<AssetIssue | null>(null);
+  const [raisingTicket, setRaisingTicket] = useState<AssetIssue | null>(null);
   const [remark, setRemark] = useState<string>('');
   const [costRequired, setCostRequired] = useState<string>('');
+  const [ticketRemark, setTicketRemark] = useState<string>('');
   const [labMap, setLabMap] = useState<Map<string, string>>(new Map());
 
 
@@ -128,7 +132,7 @@ const IssueListComponent: React.FC<{ searchTerm: string }> = ({ searchTerm: prop
     return () => {
       supabase.removeChannel(subscription);
     };
-  }, [refetch, propSearchTerm, filterStatus, filterLab, filterType, fromDate, toDate]);
+  }, [refetch, propSearchTerm, filterStatus, filterLab, filterType, filterConsumable, fromDate, toDate]);
 
   const handleResolve = async (
     issueId: string,
@@ -178,18 +182,75 @@ const IssueListComponent: React.FC<{ searchTerm: string }> = ({ searchTerm: prop
     }
   };
 
-  const getStatusColor = (status: string) =>
-    status === 'resolved' ? 'text-green-600' : 'text-red-600';
+  const handleRaiseTicket = async (issueId: string, ticketRemarkText: string = '') => {
+    try {
+      const updateData: {
+        status: string;
+        remark?: string;
+        updated_at: string;
+      } = {
+        status: 'ticket_raised',
+        updated_at: new Date().toISOString(),
+      };
 
-  const getStatusIcon = (status: string) => (status === 'resolved' ? CheckCircle : AlertTriangle);
+      if (ticketRemarkText.trim()) updateData.remark = ticketRemarkText;
+
+      const { error } = await supabase.from('asset_issues').update(updateData).eq('id', issueId);
+
+      if (error) {
+        toast.error(`Error raising ticket: ${error.message}`);
+        return;
+      }
+
+      toast.success('Ticket raised successfully!');
+      setTicketRemark('');
+      setRaisingTicket(null);
+      refetch();
+    } catch (err) {
+      console.error('Unexpected error while raising ticket:', err);
+      toast.error('Unexpected error. Please try again.');
+    }
+  };
+
+  const handleRaiseTicketClick = (issue: AssetIssue) => {
+    setRaisingTicket(issue);
+  };
+
+  const handleRaiseTicketWithRemark = () => {
+    if (raisingTicket) {
+      handleRaiseTicket(raisingTicket.id, ticketRemark);
+    }
+  };
+
+  const getStatusColor = (status: string) => {
+    switch (status) {
+      case 'resolved':
+        return 'text-green-600';
+      case 'ticket_raised':
+        return 'text-blue-600';
+      default:
+        return 'text-red-600';
+    }
+  };
+
+  const getStatusIcon = (status: string) => {
+    switch (status) {
+      case 'resolved':
+        return CheckCircle;
+      case 'ticket_raised':
+        return AlertTriangle;
+      default:
+        return AlertTriangle;
+    }
+  };
 
   const handleViewDetails = (issue: AssetIssue) => {
     setViewingIssue(issue);
   };
 
   const canResolve = (issue: AssetIssue) =>
-    (profile?.role === 'Lab Assistant' || profile?.role === 'Lab Incharge') &&
-    issue.status === 'open' &&
+    profile?.role === 'Lab Assistant' &&
+    (issue.status === 'open' || issue.status === 'ticket_raised') &&
     profile.lab_id === issue.asset?.allocated_lab;
 
   const filteredIssues = React.useMemo(
@@ -207,19 +268,24 @@ const IssueListComponent: React.FC<{ searchTerm: string }> = ({ searchTerm: prop
             filterType === 'all' ||
             issue.asset?.name_of_supply?.toLowerCase().includes(filterType.toLowerCase());
 
+          const matchesConsumable =
+            filterConsumable === 'all' ||
+            (filterConsumable === 'consumable' && issue.asset?.is_consumable) ||
+            (filterConsumable === 'non-consumable' && !issue.asset?.is_consumable);
+
           const issueDate = new Date(issue.reported_at);
           const from = new Date(fromDate);
           const to = new Date(toDate);
           const matchesDate = (!fromDate || issueDate >= from) && (!toDate || issueDate <= to);
 
-          return matchesSearch && matchesStatus && matchesLab && matchesType && matchesDate;
+          return matchesSearch && matchesStatus && matchesLab && matchesType && matchesConsumable && matchesDate;
         })
         .sort((a, b) => {
           if (a.status === 'open' && b.status === 'resolved') return -1;
           if (a.status === 'resolved' && b.status === 'open') return 1;
           return new Date(b.reported_at).getTime() - new Date(a.reported_at).getTime();
         }),
-    [issues, propSearchTerm, filterStatus, filterLab, filterType, fromDate, toDate]
+    [issues, propSearchTerm, filterStatus, filterLab, filterType, filterConsumable, fromDate, toDate]
   );
 
   if (isLoading) {
@@ -284,7 +350,7 @@ const IssueListComponent: React.FC<{ searchTerm: string }> = ({ searchTerm: prop
 
       {/* Filters */}
       <div className='bg-white dark:bg-gray-800 rounded-lg shadow-sm border border-gray-200 dark:border-gray-700 p-4 mb-4'>
-        <div className='flex flex-wrap gap-4'>
+        <div className='flex gap-4 overflow-x-auto'>
           <div className='flex items-center gap-2 text-gray-600 dark:text-gray-300 font-medium'>
             <Filter className='w-4 h-4' />
             <span>Filters:</span>
@@ -297,6 +363,7 @@ const IssueListComponent: React.FC<{ searchTerm: string }> = ({ searchTerm: prop
               { value: 'all', label: 'All Status' },
               { value: 'open', label: 'Open' },
               { value: 'resolved', label: 'Resolved' },
+              { value: 'ticket_raised', label: 'Ticket Raised' },
             ]}
             className='w-full sm:w-auto min-w-[100px]'
           />
@@ -329,6 +396,17 @@ const IssueListComponent: React.FC<{ searchTerm: string }> = ({ searchTerm: prop
               })),
             ]}
             className='w-full sm:w-auto min-w-[100px]'
+          />
+          <FilterDropdown
+            label='Consumable:'
+            value={filterConsumable}
+            onChange={setFilterConsumable}
+            options={[
+              { value: 'all', label: 'All Types' },
+              { value: 'consumable', label: 'Consumable' },
+              { value: 'non-consumable', label: 'Non-Consumable' },
+            ]}
+            className='w-full sm:w-auto min-w-[150px]'
           />
           <DateRangePicker
             fromDate={fromDate}
@@ -427,6 +505,12 @@ const IssueListComponent: React.FC<{ searchTerm: string }> = ({ searchTerm: prop
                             {canResolve(issue) && (
                               <Button onClick={() => handleResolveClick(issue)} variant='approve' size='sm'><CheckCircle></CheckCircle></Button>
                             )}
+
+                            {profile?.role === 'Lab Assistant' && issue.status === 'open' && profile.lab_id === issue.asset?.allocated_lab && (
+                              <Button onClick={() => handleRaiseTicketClick(issue)} variant='edit' size='sm'>
+                                <Tag></Tag>
+                              </Button>
+                            )}
                           </td>
                         </tr>
                       );
@@ -480,6 +564,35 @@ const IssueListComponent: React.FC<{ searchTerm: string }> = ({ searchTerm: prop
                 className='px-4 py-2 bg-green-600 text-white rounded hover:bg-green-700'
               >
                 Resolve
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+      {raisingTicket && (
+        <div className='fixed inset-0 bg-black bg-opacity-50 flex justify-center items-center z-50'>
+          <div className='bg-white dark:bg-gray-800 rounded-lg shadow-lg max-w-md w-full p-4 sm:p-6'>
+            <h3 className='text-lg font-semibold mb-4 text-gray-900 dark:text-gray-100'>
+              Raise Ticket
+            </h3>
+            <textarea
+              className='w-full p-2 border border-gray-300 dark:border-gray-600 rounded mb-4 dark:bg-gray-700 dark:text-gray-100'
+              placeholder='Add a remark (optional)'
+              value={ticketRemark}
+              onChange={e => setTicketRemark(e.target.value)}
+            />
+            <div className='flex justify-end space-x-2'>
+              <button
+                onClick={() => setRaisingTicket(null)}
+                className='px-4 py-2 bg-gray-200 dark:bg-gray-700 rounded hover:bg-gray-300 dark:hover:bg-gray-600 text-gray-800 dark:text-gray-200'
+              >
+                Cancel
+              </button>
+              <button
+                onClick={handleRaiseTicketWithRemark}
+                className='px-4 py-2 bg-blue-600 text-white rounded hover:bg-blue-700'
+              >
+                Raise Ticket
               </button>
             </div>
           </div>

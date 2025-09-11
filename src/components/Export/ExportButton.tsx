@@ -1,11 +1,11 @@
 import React, { useState } from 'react';
 import { Download, FileText, FileSpreadsheet } from 'lucide-react';
 import { ExportService, ExportFormat } from '../../lib/exportService';
-import { Asset, AssetIssue } from '../../lib/supabase';
+import { Asset, AssetIssue, AssetTransfer } from '../../lib/supabase';
 
 interface ExportButtonProps {
-  data: Asset[] | AssetIssue[];
-  type: 'assets' | 'issues';
+  data: Asset[] | AssetIssue[] | AssetTransfer[];
+  type: 'assets' | 'issues' | 'transfers';
   fileName?: string;
   className?: string;
   disabled?: boolean;
@@ -37,12 +37,19 @@ const ExportButton: React.FC<ExportButtonProps> = ({
         } else {
           throw new Error('Invalid data type for assets export');
         }
-      } else {
+      } else if (type === 'issues') {
         // Type guard to ensure data is AssetIssue[]
         if (data.length > 0 && 'issue_description' in data[0]) {
           await ExportService.exportIssues(data as AssetIssue[], format, exportFileName);
         } else {
           throw new Error('Invalid data type for issues export');
+        }
+      } else if (type === 'transfers') {
+        // Type guard to ensure data is AssetTransfer[]
+        if (data.length > 0 && 'from_lab' in data[0]) {
+          await ExportService.exportTransfers(data as AssetTransfer[], format, exportFileName);
+        } else {
+          throw new Error('Invalid data type for transfers export');
         }
       }
     } catch (_error) {

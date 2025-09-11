@@ -2,6 +2,7 @@ import { createClient } from '@supabase/supabase-js';
 
 const supabaseUrl = import.meta.env.VITE_SUPABASE_URL;
 const supabaseAnonKey = import.meta.env.VITE_SUPABASE_ANON_KEY;
+const supabaseServiceRoleKey = import.meta.env.VITE_SUPABASE_SERVICE_ROLE_KEY;
 
 if (!supabaseUrl || !supabaseAnonKey) {
   throw new Error(
@@ -15,9 +16,18 @@ export const supabase = createClient(supabaseUrl, supabaseAnonKey, {
   },
 });
 
+// Admin client for operations requiring service role (use with caution)
+export const supabaseAdmin = supabaseServiceRoleKey
+  ? createClient(supabaseUrl, supabaseServiceRoleKey, {
+      auth: {
+        storage: sessionStorage,
+      },
+    })
+  : null;
+
 // Database types
 export type UserRole = 'HOD' | 'Lab Assistant' | 'Lab Incharge';
-export type IssueStatus = 'open' | 'resolved';
+export type IssueStatus = 'open' | 'resolved' | 'ticket_raised';
 export type TransferStatus = 'pending' | 'approved' | 'received';
 
 export interface UserProfile {
@@ -43,6 +53,7 @@ export interface Asset {
   total_amount: number;
   asset_id?: string;
   remark?: string;
+  is_consumable?: boolean;
   allocated_lab: string;
   created_by?: string;
   approved: boolean;

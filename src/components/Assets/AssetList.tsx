@@ -13,6 +13,7 @@ import {
 import { toast } from 'react-hot-toast';
 import { useAuth } from '../../contexts/AuthContext';
 import { supabase, Asset } from '../../lib/supabase';
+import { fetchAssetTypes, AssetType } from '../../lib/assetTypeService';
 import AssetForm from './AssetForm';
 import AssetDetailsModal from './AssetDetailsModal';
 import AssetAnalyticsDashboard from '../Analytics/AssetAnalyticsDashboard';
@@ -29,11 +30,13 @@ const AssetList: React.FC<{ searchTerm: string }> = ({ searchTerm }) => {
   const [filterStatus, setFilterStatus] = useState('all');
   const [filterLab, setFilterLab] = useState('all');
   const [filterType, setFilterType] = useState('all');
+  const [filterConsumable, setFilterConsumable] = useState('all');
   const [showForm, setShowForm] = useState(false);
   const [editingAsset, setEditingAsset] = useState<Asset | null>(null);
   const [viewingAsset, setViewingAsset] = useState<Asset | null>(null);
   const [activeTab, setActiveTab] = useState<'list' | 'analytics'>('list');
   const [labMap, setLabMap] = useState<Map<string, string>>(new Map());
+  const [assetTypes, setAssetTypes] = useState<AssetType[]>([]);
 
   const [showDeleteModal, setShowDeleteModal] = useState(false);
   const [assetToDelete, setAssetToDelete] = useState<string | null>(null);
@@ -91,6 +94,17 @@ const AssetList: React.FC<{ searchTerm: string }> = ({ searchTerm }) => {
   const assets = assetsData.assets;
 
   useEffect(() => {
+    const fetchAssetTypesData = async () => {
+      try {
+        const types = await fetchAssetTypes();
+        setAssetTypes(types);
+      } catch (error) {
+        // console.error('Error fetching asset types:', error);
+      }
+    };
+
+    fetchAssetTypesData();
+
     // Subscribe to real-time changes in the assets table
     const subscription = supabase
       .channel('assets-list')
@@ -202,9 +216,68 @@ const AssetList: React.FC<{ searchTerm: string }> = ({ searchTerm }) => {
 
     setIsDeleting(true);
     try {
-      const { error } = await supabase.from('assets').delete().eq('id', assetToDelete);
+      // First, get the asset details to check approval status
+      const { data: asset, error: fetchError } = await supabase
+        .from('assets')
+        .select('*')
+        .eq('id', assetToDelete)
+        .single();
 
-      if (error) throw error;
+      if (fetchError) throw fetchError;
+
+      // Determine if we should save to deleted_assets based on user role and approval status
+      const shouldSaveToDeleted = (() => {
+        const isHOD = profile?.role === 'HOD';
+        const isLabIncharge = profile?.role === 'Lab Incharge';
+        const isLabAssistant = profile?.role === 'Lab Assistant';
+
+        if (isHOD) {
+          // HOD can always delete and save to deleted_assets
+          return true;
+        } else if (isLabAssistant) {
+          // Lab Assistant can only save to deleted_assets if asset has been approved by someone
+          return asset.approved_by_lab_incharge || asset.approved_by;
+        } else if (isLabIncharge) {
+          // Lab Incharge can only save to deleted_assets if asset has been approved by HOD
+          return asset.approved_by;
+        }
+        return false;
+      })();
+
+      if (shouldSaveToDeleted) {
+        // Insert into deleted_assets table
+        const { error: insertError } = await supabase
+          .from('deleted_assets')
+          .insert({
+            original_asset_id: asset.id,
+            date: asset.date,
+            name_of_supply: asset.name_of_supply,
+            asset_type: asset.asset_type,
+            invoice_number: asset.invoice_number,
+            description: asset.description,
+            rate: asset.rate,
+            total_amount: asset.total_amount,
+            asset_id: asset.asset_id,
+            remark: asset.remark,
+            is_consumable: asset.is_consumable,
+            allocated_lab: asset.allocated_lab,
+            created_by: asset.created_by,
+            approved: asset.approved,
+            approved_by: asset.approved_by,
+            approved_at: asset.approved_at,
+            approved_by_lab_incharge: asset.approved_by_lab_incharge,
+            approved_at_lab_incharge: asset.approved_at_lab_incharge,
+            deleted_by: profile?.id,
+            deleted_at: new Date().toISOString(),
+            hod_approval: false, // Will be set to true when HOD approves deletion
+          });
+
+        if (insertError) throw insertError;
+      }
+
+      // Delete from assets table
+      const { error: deleteError } = await supabase.from('assets').delete().eq('id', assetToDelete);
+      if (deleteError) throw deleteError;
 
       // Notification is now only sent from the form, not here
       toast.success('Asset deleted successfully!');
@@ -255,14 +328,82 @@ const AssetList: React.FC<{ searchTerm: string }> = ({ searchTerm }) => {
         setShowBulkDeleteModal(false);
         return;
       }
-      const { error } = await supabase.from('assets').delete().in('id', deletableAssets.map(a => a.id));
-      if (error) throw error;
-      toast.success(`${deletableAssets.length} assets deleted successfully!`);
+
+      // Process each asset individually to apply conditional deletion logic
+      const deletedCount = { saved: 0, notSaved: 0 };
+
+      for (const asset of deletableAssets) {
+        // Determine if we should save to deleted_assets based on user role and approval status
+        const shouldSaveToDeleted = (() => {
+          const isHOD = profile?.role === 'HOD';
+          const isLabIncharge = profile?.role === 'Lab Incharge';
+          const isLabAssistant = profile?.role === 'Lab Assistant';
+
+          if (isHOD) {
+            // HOD can always delete and save to deleted_assets
+            return true;
+          } else if (isLabAssistant) {
+            // Lab Assistant can only save to deleted_assets if asset has been approved by someone
+            return asset.approved_by_lab_incharge || asset.approved_by;
+          } else if (isLabIncharge) {
+            // Lab Incharge can only save to deleted_assets if asset has been approved by HOD
+            return asset.approved_by;
+          }
+          return false;
+        })();
+
+        if (shouldSaveToDeleted) {
+          // Insert into deleted_assets table
+          const { error: insertError } = await supabase
+            .from('deleted_assets')
+            .insert({
+              original_asset_id: asset.id,
+              date: asset.date,
+              name_of_supply: asset.name_of_supply,
+              asset_type: asset.asset_type,
+              invoice_number: asset.invoice_number,
+              description: asset.description,
+              rate: asset.rate,
+              total_amount: asset.total_amount,
+              asset_id: asset.asset_id,
+              remark: asset.remark,
+              is_consumable: asset.is_consumable,
+              allocated_lab: asset.allocated_lab,
+              created_by: asset.created_by,
+              approved: asset.approved,
+              approved_by: asset.approved_by,
+              approved_at: asset.approved_at,
+              approved_by_lab_incharge: asset.approved_by_lab_incharge,
+              approved_at_lab_incharge: asset.approved_at_lab_incharge,
+              deleted_by: profile?.id,
+              deleted_at: new Date().toISOString(),
+              hod_approval: false, // Will be set to true when HOD approves deletion
+            });
+
+          if (insertError) {
+            console.error('Error inserting to deleted_assets:', insertError);
+            continue; // Skip this asset if insert fails
+          }
+          deletedCount.saved++;
+        } else {
+          deletedCount.notSaved++;
+        }
+
+        // Delete from assets table
+        const { error: deleteError } = await supabase.from('assets').delete().eq('id', asset.id);
+        if (deleteError) {
+          console.error('Error deleting asset:', deleteError);
+          continue; // Skip this asset if delete fails
+        }
+      }
+
+      toast.success(`${deletedCount.saved + deletedCount.notSaved} assets deleted successfully!`);
       refetch();
       setSelectedAssets(new Set());
       setShowBulkActions(false);
     } catch (_error) {
-      // console.error('Error bulk deleting assets:', _error);
+      console.error('Error bulk deleting assets:', _error);
+      toast.error('Failed to delete some assets. Please try again.');
     } finally {
       setIsBulkDeleting(false);
       setShowBulkDeleteModal(false);
@@ -320,14 +461,19 @@ const AssetList: React.FC<{ searchTerm: string }> = ({ searchTerm }) => {
 
         const matchesType = filterType === 'all' || asset.asset_type === filterType;
 
+        const matchesConsumable =
+          filterConsumable === 'all' ||
+          (filterConsumable === 'consumable' && asset.is_consumable) ||
+          (filterConsumable === 'non-consumable' && !asset.is_consumable);
+
         const assetDate = new Date(asset.date);
         const from = new Date(fromDate);
         const to = new Date(toDate);
         const matchesDate = (!fromDate || assetDate >= from) && (!toDate || assetDate <= to);
 
-        return matchesSearch && matchesStatus && matchesLab && matchesType && matchesDate;
+        return matchesSearch && matchesStatus && matchesLab && matchesType && matchesConsumable && matchesDate;
       }),
-    [assets, searchTerm, filterStatus, filterLab, filterType, fromDate, toDate]
+    [assets, searchTerm, filterStatus, filterLab, filterType, filterConsumable, fromDate, toDate]
   );
 
   const canEdit = (asset: Asset) =>
@@ -338,13 +484,10 @@ const AssetList: React.FC<{ searchTerm: string }> = ({ searchTerm }) => {
   const canApprove = (asset: Asset) => {
     const isHOD = profile?.role === 'HOD';
     const isLabIncharge = profile?.role === 'Lab Incharge';
-    const isLabAssistant = profile?.role === 'Lab Assistant';
 
     if (isHOD) {
       return !asset.approved_by && !asset.approved;
     } else if (isLabIncharge) {
-      return !asset.approved_by_lab_incharge && !asset.approved && profile.lab_id === asset.allocated_lab;
-    } else if (isLabAssistant) {
       return !asset.approved_by_lab_incharge && !asset.approved && profile.lab_id === asset.allocated_lab;
     }
 
@@ -432,7 +575,7 @@ const AssetList: React.FC<{ searchTerm: string }> = ({ searchTerm }) => {
 
       {/* Filters */}
       <div className='bg-white dark:bg-gray-800 rounded-lg shadow-sm border border-gray-200 dark:border-gray-700 p-4 mb-4'>
-        <div className='flex flex-wrap gap-4'>
+        <div className='flex gap-4 overflow-x-auto'>
           <div className='flex items-center gap-2 text-gray-600 dark:text-gray-300 font-medium'>
             <Filter className='w-4 h-4' />
             <span>Filters:</span>
@@ -469,18 +612,22 @@ const AssetList: React.FC<{ searchTerm: string }> = ({ searchTerm }) => {
             onChange={setFilterType}
             options={[
               { value: 'all', label: 'All Types' },
-              { value: 'cpu', label: 'CPU' },
-              { value: 'printer', label: 'Printer' },
-              { value: 'network', label: 'Network Equipment' },
-              { value: 'peripheral', label: 'Peripheral' },
-              { value: 'microcontroller', label: 'Microcontroller' },
-              { value: 'monitor', label: 'Monitor' },
-              { value: 'mouse', label: 'Mouse' },
-              { value: 'keyboard', label: 'Keyboard' },
-              { value: 'scanner', label: 'Scanner' },
-              { value: 'projector', label: 'Projector' },
-              { value: 'laptop', label: 'Laptop' },
-              { value: 'other', label: 'Other' },
+              ...assetTypes.map(type => ({
+                value: type.identifier,
+                label: type.name,
+              })),
+            ]}
+            className='w-auto min-w-[150px]'
+          />
+
+          <FilterDropdown
+            label='Consumable:'
+            value={filterConsumable}
+            onChange={setFilterConsumable}
+            options={[
+              { value: 'all', label: 'All Types' },
+              { value: 'consumable', label: 'Consumable' },
+              { value: 'non-consumable', label: 'Non-Consumable' },
             ]}
             className='w-auto min-w-[150px]'
           />
@@ -587,6 +734,9 @@ const AssetList: React.FC<{ searchTerm: string }> = ({ searchTerm }) => {
                         Lab
                       </th>
                       <th className='px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-300 uppercase tracking-wider'>
+                        Type
+                      </th>
+                      <th className='px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-300 uppercase tracking-wider'>
                         Status
                       </th>
                       <th className='px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-300 uppercase tracking-wider'>
@@ -617,6 +767,17 @@ const AssetList: React.FC<{ searchTerm: string }> = ({ searchTerm }) => {
                         </td>
                         <td className='px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900 dark:text-gray-100'>
                           {asset.lab_name}
+                        </td>
+                        <td className='px-6 py-4 whitespace-nowrap text-sm'>
+                          {asset.is_consumable ? (
+                            <span className='inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-200'>
+                              Consumable
+                            </span>
+                          ) : (
+                            <span className='inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-blue-100 text-blue-800 dark:bg-blue-900 dark:text-blue-200'>
+                              Non-Consumable
+                            </span>
+                          )}
                         </td>
                         <td className='px-6 py-4 whitespace-nowrap text-sm'>
                           {asset.approved ? (

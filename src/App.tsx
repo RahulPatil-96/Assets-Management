@@ -10,7 +10,7 @@ import { UpdatePassword } from './components/Auth/update-password';
 import Navbar from './components/Layout/Navbar';
 import Sidebar from './components/Layout/Sidebar';
 import { Toaster } from 'react-hot-toast';
-import { Lab } from './types/lab';
+import type { Lab } from './types';
 
 // Lazy load components for better performance
 const Dashboard = lazy(() => import('./components/Dashboard/Dashboard'));
@@ -18,6 +18,8 @@ const AssetList = lazy(() => import('./components/Assets/AssetList'));
 const IssueList = lazy(() => import('./components/Issues/IssueList'));
 const TransferList = lazy(() => import('./components/Transfers/TransferList'));
 const LabManagementPage = lazy(() => import('./components/Labs/LabManagementPage'));
+const DeletedAssetList = lazy(() => import('./components/Assets/DeletedAssetList'));
+const AssetTypeManagementPage = lazy(() => import('./components/AssetTypes/AssetTypeManagementPage'));
 
 const MainApp: React.FC = () => {
   const [_labs, _setLabs] = useState<Lab[]>([]); // State for labs
@@ -65,111 +67,137 @@ const MainApp: React.FC = () => {
       </div>
     );
 
-    switch (activeTab) {
-      case 'dashboard':
-        return (
-          <Suspense fallback={<LoadingFallback />}>
-            <Dashboard onNavigate={setActiveTab} />
-          </Suspense>
-        );
-      case 'assets':
-        return (
-          <Suspense fallback={<LoadingFallback />}>
-            <AssetList searchTerm={searchTerm} />
-          </Suspense>
-        );
-      case 'issues':
-        return (
-          <Suspense fallback={<LoadingFallback />}>
-            <IssueList searchTerm={searchTerm} />
-          </Suspense>
-        );
-      case 'transfers':
-        return (
-          <Suspense fallback={<LoadingFallback />}>
-            <TransferList searchTerm={searchTerm} />
-          </Suspense>
-        );
-      case 'approvals':
-        if (profile.role === 'HOD') {
+      switch (activeTab) {
+        case 'dashboard':
+          return (
+            <Suspense fallback={<LoadingFallback />}>
+              <Dashboard onNavigate={setActiveTab} />
+            </Suspense>
+          );
+        case 'assets':
           return (
             <Suspense fallback={<LoadingFallback />}>
               <AssetList searchTerm={searchTerm} />
             </Suspense>
           );
-        }
-        return (
-          <Suspense fallback={<LoadingFallback />}>
-            <Dashboard />
-          </Suspense>
-        );
-      case 'alerts':
-        if (profile.role === 'HOD') {
+        case 'issues':
           return (
             <Suspense fallback={<LoadingFallback />}>
               <IssueList searchTerm={searchTerm} />
             </Suspense>
           );
-        }
-        return (
-          <Suspense fallback={<LoadingFallback />}>
-            <Dashboard />
-          </Suspense>
-        );
-      case 'reports':
-        return (
-          <Suspense fallback={<LoadingFallback />}>
-            <Dashboard />
-          </Suspense>
-        );
-      case 'lab-management':
-        return (
-          <Suspense fallback={<LoadingFallback />}>
-            <LabManagementPage />
-          </Suspense>
-        );
-      case 'settings':
-        return (
-          <div className='p-6'>
-            <h1 className='text-2xl font-bold text-gray-900 dark:text-white mb-6'>Settings</h1>
-            <div className='space-y-6'>
-              <div className='bg-white dark:bg-gray-800 rounded-lg shadow-sm border border-gray-200 dark:border-gray-700 p-6'>
-                <h2 className='text-lg font-semibold text-gray-900 dark:text-white mb-4'>
-                  User Profile
-                </h2>
-                <div className='space-y-4'>
-                  <div>
-                    <label className='block text-sm font-medium text-gray-700 dark:text-gray-300'>
-                      Name
-                    </label>
-                    <p className='mt-1 text-sm text-gray-900 dark:text-white'>{profile.name}</p>
-                  </div>
-                  <div>
-                    <label className='block text-sm font-medium text-gray-700 dark:text-gray-300'>
-                      Role
-                    </label>
-                    <p className='mt-1 text-sm text-gray-900 dark:text-white'>{profile.role}</p>
-                  </div>
-                  <div>
-                    <label className='block text-sm font-medium text-gray-700 dark:text-gray-300'>
-                      Lab
-                    </label>
-                    <p className='mt-1 text-sm text-gray-900 dark:text-white'>
-                      {(profile as any).lab_name || profile.lab_id}
-                    </p>
+        case 'transfers':
+          return (
+            <Suspense fallback={<LoadingFallback />}>
+              <TransferList searchTerm={searchTerm} />
+            </Suspense>
+          );
+        case 'approvals':
+          if (profile.role === 'HOD') {
+            return (
+              <Suspense fallback={<LoadingFallback />}>
+                <AssetList searchTerm={searchTerm} />
+              </Suspense>
+            );
+          }
+          return (
+            <Suspense fallback={<LoadingFallback />}>
+              <Dashboard />
+            </Suspense>
+          );
+        case 'alerts':
+          if (profile.role === 'HOD') {
+            return (
+              <Suspense fallback={<LoadingFallback />}>
+                <IssueList searchTerm={searchTerm} />
+              </Suspense>
+            );
+          }
+          return (
+            <Suspense fallback={<LoadingFallback />}>
+              <Dashboard />
+            </Suspense>
+          );
+        case 'reports':
+          return (
+            <Suspense fallback={<LoadingFallback />}>
+              <Dashboard />
+            </Suspense>
+          );
+        case 'lab-management':
+          return (
+            <Suspense fallback={<LoadingFallback />}>
+              <LabManagementPage />
+            </Suspense>
+          );
+        case 'deleted-assets':
+          if (profile.role === 'HOD') {
+            return (
+              <Suspense fallback={<LoadingFallback />}>
+                <DeletedAssetList />
+              </Suspense>
+            );
+          }
+          return (
+            <Suspense fallback={<LoadingFallback />}>
+              <Dashboard />
+            </Suspense>
+          );
+        case 'asset-types':
+          if (profile.role === 'HOD') {
+            return (
+              <Suspense fallback={<LoadingFallback />}>
+                <AssetTypeManagementPage />
+              </Suspense>
+            );
+          }
+          return (
+            <Suspense fallback={<LoadingFallback />}>
+              <Dashboard />
+            </Suspense>
+          );
+        case 'settings':
+          return (
+            <div className='p-6'>
+              <h1 className='text-2xl font-bold text-gray-900 dark:text-white mb-6'>Settings</h1>
+              <div className='space-y-6'>
+                <div className='bg-white dark:bg-gray-800 rounded-lg shadow-sm border border-gray-200 dark:border-gray-700 p-6'>
+                  <h2 className='text-lg font-semibold text-gray-900 dark:text-white mb-4'>
+                    User Profile
+                  </h2>
+                  <div className='space-y-4'>
+                    <div>
+                      <label className='block text-sm font-medium text-gray-700 dark:text-gray-300'>
+                        Name
+                      </label>
+                      <p className='mt-1 text-sm text-gray-900 dark:text-white'>{profile.name}</p>
+                    </div>
+                    <div>
+                      <label className='block text-sm font-medium text-gray-700 dark:text-gray-300'>
+                        Role
+                      </label>
+                      <p className='mt-1 text-sm text-gray-900 dark:text-white'>{profile.role}</p>
+                    </div>
+                    <div>
+                      <label className='block text-sm font-medium text-gray-700 dark:text-gray-300'>
+                        Lab
+                      </label>
+                      <p className='mt-1 text-sm text-gray-900 dark:text-white'>
+                        {(profile as any).lab_name || profile.lab_id}
+                      </p>
+                    </div>
                   </div>
                 </div>
               </div>
             </div>
-          </div>
-        );
-      default:
-        return (
-          <Suspense fallback={<LoadingFallback />}>
-            <Dashboard />
-          </Suspense>
-        );
-    }
+          );
+        default:
+          return (
+            <Suspense fallback={<LoadingFallback />}>
+              <Dashboard />
+            </Suspense>
+          );
+      }
   };
 
   return (

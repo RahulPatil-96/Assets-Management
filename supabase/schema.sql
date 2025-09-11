@@ -4,17 +4,24 @@
 DROP SCHEMA public CASCADE;
 CREATE SCHEMA public;
 
--- ===================================================================
--- CUSTOM ENUM TYPES
--- ===================================================================
-CREATE TYPE user_role AS ENUM ('HOD', 'Lab Assistant', 'Lab Incharge');
-CREATE TYPE issue_status AS ENUM ('open', 'resolved');
-CREATE TYPE transfer_status AS ENUM ('pending', 'approved', 'received');
+-- =========================
+-- Extensions
+-- =========================
+CREATE EXTENSION IF NOT EXISTS "uuid-ossp";
+CREATE EXTENSION IF NOT EXISTS pgcrypto;
 
--- ===================================================================
--- TABLES
--- ===================================================================
--- Labs table
+-- =========================
+-- Enums
+-- =========================
+CREATE TYPE user_role AS ENUM ('Lab Assistant', 'Lab Incharge', 'HOD');
+CREATE TYPE issue_status AS ENUM ('open', 'in_progress', 'resolved', 'closed');
+CREATE TYPE transfer_status AS ENUM ('pending', 'approved', 'rejected', 'completed');
+
+-- =========================
+-- Tables
+-- =========================
+
+-- 1. Labs table (must be first)
 CREATE TABLE labs (
   id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
   name text NOT NULL,
@@ -25,11 +32,10 @@ CREATE TABLE labs (
   updated_at timestamptz DEFAULT now()
 );
 
-
--- User profiles table
+-- 2. User profiles table
 CREATE TABLE user_profiles (
   id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
-  auth_id uuid NOT NULL UNIQUE REFERENCES auth.users(id) ON DELETE CASCADE,
+  auth_id uuid NOT NULL UNIQUE, -- external auth uid (e.g. supabase auth.uid())
   email text NOT NULL UNIQUE,
   role user_role NOT NULL,
   name text NOT NULL,
@@ -38,20 +44,31 @@ CREATE TABLE user_profiles (
   updated_at timestamptz DEFAULT now()
 );
 
--- Assets table
+-- 3. Asset types table (managed by HOD)
+CREATE TABLE asset_types (
+  id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+  name text NOT NULL UNIQUE,
+  identifier text NOT NULL UNIQUE, -- e.g. 'PC','PR','NW'
+  created_by uuid REFERENCES user_profiles(id) ON DELETE SET NULL,
+  created_at timestamptz DEFAULT now(),
+  updated_at timestamptz DEFAULT now()
+);
+
+-- 4. Assets table
 CREATE TABLE assets (
   id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
   sr_no serial UNIQUE,
   date date NOT NULL DEFAULT CURRENT_DATE,
   name_of_supply text NOT NULL,
-  asset_type text NOT NULL DEFAULT 'other',
+  asset_type uuid NOT NULL REFERENCES asset_types(id),
   invoice_number text,
   description text,
   rate numeric(10,2) NOT NULL CHECK (rate >= 0),
   total_amount numeric(10,2) GENERATED ALWAYS AS (rate) STORED,
   asset_id text,
   remark text,
-allocated_lab uuid NOT NULL REFERENCES labs(id),
+  is_consumable boolean DEFAULT false,
+  allocated_lab uuid NOT NULL REFERENCES labs(id),
   created_by uuid REFERENCES user_profiles(id) ON DELETE SET NULL,
   approved boolean DEFAULT false,
   approved_by uuid REFERENCES user_profiles(id) ON DELETE SET NULL,
@@ -62,7 +79,41 @@ allocated_lab uuid NOT NULL REFERENCES labs(id),
   updated_at timestamptz DEFAULT now()
 );
 
--- Asset issues table
+-- 5. Deleted assets table
+CREATE TABLE deleted_assets (
+  id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+  original_asset_id uuid NOT NULL REFERENCES assets(id) ON DELETE CASCADE,
+  sr_no serial,
+  date date NOT NULL DEFAULT CURRENT_DATE,
+  name_of_supply text NOT NULL,
+  asset_type uuid NOT NULL REFERENCES asset_types(id),
+  invoice_number text,
+  description text,
+  rate numeric(10,2) NOT NULL CHECK (rate >= 0),
+  total_amount numeric(10,2) GENERATED ALWAYS AS (rate) STORED,
+  asset_id text,
+  remark text,
+  is_consumable boolean DEFAULT false,
+  allocated_lab uuid NOT NULL REFERENCES labs(id),
+  created_by uuid REFERENCES user_profiles(id) ON DELETE SET NULL,
+  approved boolean DEFAULT false,
+  approved_by uuid REFERENCES user_profiles(id) ON DELETE SET NULL,
+  approved_at timestamptz,
+  approved_by_lab_incharge uuid REFERENCES user_profiles(id) ON DELETE SET NULL,
+  approved_at_lab_incharge timestamptz,
+  deleted_by uuid REFERENCES user_profiles(id) ON DELETE SET NULL,
+  deleted_at timestamptz DEFAULT now(),
+  hod_approval boolean DEFAULT false,
+  hod_approved_by uuid REFERENCES user_profiles(id) ON DELETE SET NULL,
+  hod_approved_at timestamptz,
+  restored boolean DEFAULT false,
+  restored_at timestamptz,
+  restored_by uuid REFERENCES user_profiles(id) ON DELETE SET NULL,
+  created_at timestamptz DEFAULT now(),
+  updated_at timestamptz DEFAULT now()
+);
+
+-- 6. Asset issues table
 CREATE TABLE asset_issues (
   id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
   asset_id uuid REFERENCES assets(id) ON DELETE CASCADE,
@@ -77,7 +128,7 @@ CREATE TABLE asset_issues (
   updated_at timestamptz DEFAULT now()
 );
 
--- Asset transfers table
+-- 7. Asset transfers table
 CREATE TABLE asset_transfers (
   id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
   asset_id uuid REFERENCES assets(id) ON DELETE CASCADE,
@@ -93,11 +144,11 @@ CREATE TABLE asset_transfers (
   updated_at timestamptz DEFAULT now()
 );
 
--- Notifications table
+-- 8. Notifications table
 CREATE TABLE notifications (
   id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
-  user_id uuid REFERENCES auth.users(id) ON DELETE CASCADE,
-  actor_id uuid REFERENCES auth.users(id) ON DELETE CASCADE,
+  user_id uuid REFERENCES user_profiles(id) ON DELETE CASCADE,
+  actor_id uuid REFERENCES user_profiles(id) ON DELETE CASCADE,
   action_type text NOT NULL,
   entity_type text NOT NULL,
   entity_id uuid,
@@ -107,10 +158,10 @@ CREATE TABLE notifications (
   created_at timestamptz DEFAULT now()
 );
 
--- Activity logs table
+-- 9. Activity logs table
 CREATE TABLE activity_logs (
   id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
-  user_id uuid REFERENCES auth.users(id) ON DELETE CASCADE,
+  user_id uuid REFERENCES user_profiles(id) ON DELETE CASCADE,
   action_type text NOT NULL,
   entity_type text NOT NULL,
   entity_id uuid,
@@ -167,6 +218,44 @@ CREATE INDEX idx_activity_logs_severity ON activity_logs(severity_level);
 
 -- ===================================================================
 -- FUNCTIONS & TRIGGERS
+-- ===================================================================
+
+-- Utility: Map auth.uid() (external uuid) to user_profiles.id (internal)
+CREATE OR REPLACE FUNCTION public.get_profile_id_by_auth(p_auth_id uuid)
+RETURNS uuid
+LANGUAGE sql
+AS $$
+  SELECT id FROM public.user_profiles WHERE auth_id = p_auth_id LIMIT 1;
+$$;
+
+-- Centralized function to get asset type prefix (now by asset_type id)
+CREATE OR REPLACE FUNCTION get_asset_type_prefix(p_asset_type_id uuid)
+RETURNS text AS $$
+DECLARE
+    prefix text;
+BEGIN
+    SELECT identifier INTO prefix FROM asset_types WHERE id = p_asset_type_id LIMIT 1;
+
+    IF prefix IS NULL THEN
+        prefix := 'OT'; -- Default prefix for Other
+    END IF;
+
+    RETURN prefix;
+END;
+$$ LANGUAGE plpgsql;
+
+-- Function to generate asset ID
+CREATE OR REPLACE FUNCTION generate_asset_id(lab_identifier text, asset_type_id uuid, asset_number integer)
+RETURNS text AS $$
+DECLARE
+    asset_type_prefix text;
+BEGIN
+    -- Get asset type prefix from the centralized function
+    asset_type_prefix := get_asset_type_prefix(asset_type_id);
+
+    RETURN 'RSCOE/CSBS/' || lab_identifier || '/' || asset_type_prefix || '-' || asset_number;
+END;
+$$ LANGUAGE plpgsql;
 
 -- Function to update asset_ids when a lab's identifier changes
 CREATE OR REPLACE FUNCTION update_asset_ids_for_lab(lab_id uuid, new_lab_identifier text)
@@ -177,7 +266,7 @@ DECLARE
   new_asset_id text;
 BEGIN
   FOR asset_row IN SELECT * FROM assets WHERE allocated_lab = lab_id LOOP
-    -- Extract asset type and number from the old asset_id
+    -- Extract asset number from the old asset_id or compute next
     asset_number := COALESCE(
       CAST(SUBSTRING(asset_row.asset_id FROM '.*-(\d+)$') AS INTEGER),
       1
@@ -187,79 +276,29 @@ BEGIN
   END LOOP;
 END;
 $$ LANGUAGE plpgsql;
--- ===================================================================
 
--- Function to generate asset ID
-CREATE OR REPLACE FUNCTION generate_asset_id(lab_identifier text, asset_type text, asset_number integer)
-RETURNS text AS $$
-DECLARE
-    asset_type_prefix text;
-BEGIN
-    -- Map asset types to prefixes
-    CASE asset_type
-        WHEN 'cpu' THEN asset_type_prefix := 'PC';
-        WHEN 'printer' THEN asset_type_prefix := 'PR';
-        WHEN 'network' THEN asset_type_prefix := 'NW';
-        WHEN 'peripheral' THEN asset_type_prefix := 'PE';
-        WHEN 'microcontroller' THEN asset_type_prefix := 'MC';
-        WHEN 'monitor' THEN asset_type_prefix := 'MO';
-        WHEN 'mouse' THEN asset_type_prefix := 'MS';
-        WHEN 'keyboard' THEN asset_type_prefix := 'KB';
-        WHEN 'scanner' THEN asset_type_prefix := 'SC';
-        WHEN 'projector' THEN asset_type_prefix := 'PJ';
-        WHEN 'laptop' THEN asset_type_prefix := 'LP';
-        ELSE asset_type_prefix := 'OT';
-    END CASE;
-    
-    RETURN 'RSCOE/CSBS/' || lab_identifier || '/' || asset_type_prefix || '-' || asset_number;
-END;
-$$ LANGUAGE plpgsql;
-
--- Trigger to update asset IDs when lab identifier changes
-CREATE OR REPLACE FUNCTION trg_update_asset_ids_on_lab_change() RETURNS TRIGGER AS $$
-BEGIN
-  -- If lab_identifier has changed, update all asset IDs for this lab
-  IF OLD.lab_identifier IS DISTINCT FROM NEW.lab_identifier THEN
-    PERFORM update_asset_ids_for_lab(NEW.id, NEW.lab_identifier);
-  END IF;
-  RETURN NEW;
-END;
-$$ LANGUAGE plpgsql;
-
--- Trigger to set asset_id on insert
+-- Trigger to set asset_id on insert and recalc on asset_type/allocated_lab update
 CREATE OR REPLACE FUNCTION set_asset_id() RETURNS TRIGGER AS $$
 DECLARE
     asset_number integer;
     lab_identifier_value text;
+    asset_type_prefix text;
 BEGIN
     -- Get the lab identifier from the labs table
     SELECT lab_identifier INTO lab_identifier_value 
     FROM labs 
-WHERE id = NEW.allocated_lab;  -- No need for casting
+    WHERE id = NEW.allocated_lab;
 
-    -- If lab identifier not found, use the allocated_lab as fallback
+    -- If lab identifier not found, use the allocated_lab as fallback (uuid text)
     IF lab_identifier_value IS NULL THEN
-        lab_identifier_value := NEW.allocated_lab;
+        lab_identifier_value := NEW.allocated_lab::text;
     END IF;
 
+    -- Determine asset_type_id (NEW.asset_type is uuid)
     -- Get the next asset number for the specific lab and asset type combination
     SELECT COALESCE(MAX(
         CASE 
-            WHEN asset_id IS NOT NULL AND asset_id LIKE '%' || lab_identifier_value || '/' || 
-                 CASE NEW.asset_type
-                     WHEN 'cpu' THEN 'PC'
-                     WHEN 'printer' THEN 'PR'
-                     WHEN 'network' THEN 'NW'
-                     WHEN 'peripheral' THEN 'PE'
-                     WHEN 'microcontroller' THEN 'MC'
-                     WHEN 'monitor' THEN 'MO'
-                     WHEN 'mouse' THEN 'MS'
-                     WHEN 'keyboard' THEN 'KB'
-                     WHEN 'scanner' THEN 'SC'
-                     WHEN 'projector' THEN 'PJ'
-                     WHEN 'laptop' THEN 'LP'
-                     ELSE 'OT'
-                 END || '-%' 
+            WHEN asset_id IS NOT NULL AND asset_id LIKE '%' || lab_identifier_value || '/' || get_asset_type_prefix(NEW.asset_type) || '-%' 
             THEN CAST(SUBSTRING(asset_id FROM '.*-(\d+)$') AS INTEGER)
             ELSE 0
         END
@@ -273,6 +312,51 @@ WHERE id = NEW.allocated_lab;  -- No need for casting
 END;
 $$ LANGUAGE plpgsql;
 
+-- Trigger to update asset IDs when lab identifier changes
+CREATE OR REPLACE FUNCTION trg_update_asset_ids_on_lab_change() RETURNS TRIGGER AS $$
+BEGIN
+  IF OLD.lab_identifier IS DISTINCT FROM NEW.lab_identifier THEN
+    PERFORM update_asset_ids_for_lab(NEW.id, NEW.lab_identifier);
+  END IF;
+  RETURN NEW;
+END;
+$$ LANGUAGE plpgsql;
+
+-- Trigger to update asset_id when allocated_lab or asset_type changes
+CREATE OR REPLACE FUNCTION trg_update_asset_id_on_allocated_lab_or_type_change() RETURNS TRIGGER AS $$
+DECLARE
+    asset_number integer;
+    lab_identifier_value text;
+BEGIN
+    -- Only update if allocated_lab OR asset_type has changed
+    IF OLD.allocated_lab IS DISTINCT FROM NEW.allocated_lab OR OLD.asset_type IS DISTINCT FROM NEW.asset_type THEN
+
+        -- Get the lab identifier from the labs table
+        SELECT lab_identifier INTO lab_identifier_value
+        FROM labs
+        WHERE id = NEW.allocated_lab;
+
+        IF lab_identifier_value IS NULL THEN
+            lab_identifier_value := NEW.allocated_lab::text;
+        END IF;
+
+        -- Get the next asset number for the specific lab and asset type combination
+        SELECT COALESCE(MAX(
+            CASE
+                WHEN asset_id IS NOT NULL AND asset_id LIKE '%' || lab_identifier_value || '/' || get_asset_type_prefix(NEW.asset_type) || '-%'
+                THEN CAST(SUBSTRING(asset_id FROM '.*-(\d+)$') AS INTEGER)
+                ELSE 0
+            END
+        ), 0) + 1 INTO asset_number
+        FROM assets
+        WHERE allocated_lab = NEW.allocated_lab AND asset_type = NEW.asset_type AND id != NEW.id;  -- Exclude self
+
+        NEW.asset_id := generate_asset_id(lab_identifier_value, NEW.asset_type, asset_number);
+    END IF;
+    RETURN NEW;
+END;
+$$ LANGUAGE plpgsql;
+
 -- Timestamp update function
 CREATE OR REPLACE FUNCTION update_updated_at_column() RETURNS TRIGGER AS $$
 BEGIN
@@ -281,11 +365,11 @@ BEGIN
 END;
 $$ LANGUAGE plpgsql;
 
--- Function to create user profile with elevated privileges
+-- Function to create user profile with elevated privileges (SECURITY DEFINER)
 CREATE OR REPLACE FUNCTION create_user_profile(
   p_auth_id uuid,
   p_email text,
-  p_role text,  -- Changed from user_role to text to accept string input
+  p_role text,  -- will convert to enum
   p_name text,
   p_lab_id uuid
 ) RETURNS uuid AS $$
@@ -297,11 +381,9 @@ BEGIN
   BEGIN
     v_valid_role := p_role::user_role;
   EXCEPTION WHEN invalid_text_representation THEN
-    -- If the role is invalid, default to 'Lab Assistant'
     v_valid_role := 'Lab Assistant';
   END;
   
-  -- Insert the user profile with elevated privileges
   INSERT INTO user_profiles (auth_id, email, role, name, lab_id)
   VALUES (p_auth_id, p_email, v_valid_role, p_name, p_lab_id)
   RETURNING id INTO v_profile_id;
@@ -313,17 +395,13 @@ EXCEPTION
 END;
 $$ LANGUAGE plpgsql SECURITY DEFINER;
 
--- Grant execute permissions
-GRANT SELECT ON labs TO anon;
-GRANT EXECUTE ON FUNCTION create_user_profile(uuid, text, text, text, uuid) TO authenticated, anon;
-
--- Function to create notifications
+-- Create_notification now accepts auth IDs and stores user_profiles.id mapping
 CREATE OR REPLACE FUNCTION public.create_notification(
   action_type text,
   entity_id uuid,
   entity_name text,
   entity_type text,
-  actor_id uuid,
+  actor_auth_id uuid,
   target_auth_id uuid DEFAULT NULL
 ) RETURNS void
 LANGUAGE plpgsql
@@ -332,6 +410,8 @@ SET search_path = public
 AS $$
 DECLARE
   v_message text;
+  v_actor_profile_id uuid;
+  v_target_profile_id uuid;
 BEGIN
   -- Build human-readable message
   CASE action_type
@@ -346,27 +426,28 @@ BEGIN
     ELSE                 v_message := 'Action performed on ' || entity_type || ': ' || entity_name;
   END CASE;
 
+  -- Map actor auth uid to user_profiles.id (if present)
+  SELECT id INTO v_actor_profile_id FROM user_profiles WHERE auth_id = actor_auth_id LIMIT 1;
+
   IF target_auth_id IS NOT NULL THEN
-    -- Create notification for specific user
-    INSERT INTO notifications (user_id, actor_id, action_type, entity_type, entity_id, entity_name, message)
-    VALUES (target_auth_id, actor_id, action_type, entity_type, entity_id, entity_name, v_message);
+    SELECT id INTO v_target_profile_id FROM user_profiles WHERE auth_id = target_auth_id LIMIT 1;
+
+    IF v_target_profile_id IS NOT NULL THEN
+      INSERT INTO notifications (user_id, actor_id, action_type, entity_type, entity_id, entity_name, message)
+      VALUES (v_target_profile_id, v_actor_profile_id, action_type, entity_type, entity_id, entity_name, v_message);
+    END IF;
   ELSE
-    -- Broadcast to all users in user_profiles
+    -- Broadcast to all user_profiles
     INSERT INTO notifications (user_id, actor_id, action_type, entity_type, entity_id, entity_name, message)
-    SELECT auth_id, actor_id, action_type, entity_type, entity_id, entity_name, v_message
+    SELECT id, v_actor_profile_id, action_type, entity_type, entity_id, entity_name, v_message
     FROM user_profiles;
   END IF;
 END;
 $$;
 
--- Optional permissions (Supabase/PostgREST typical setup)
-GRANT EXECUTE ON FUNCTION public.create_notification(text, uuid, text, text, uuid, uuid) TO authenticated, anon;
-
--- -------------------------------------------------------------------
--- log_activity(...)  -> calls create_notification with the CORRECT order
--- -------------------------------------------------------------------
+-- log_activity: accepts p_user_auth_id (auth.uid()) and maps to user_profiles.id internally
 CREATE OR REPLACE FUNCTION public.log_activity(
-  p_user_id uuid,
+  p_user_auth_id uuid,
   p_action_type text,
   p_entity_type text,
   p_entity_id uuid,
@@ -385,25 +466,30 @@ SET search_path = public
 AS $$
 DECLARE
   v_log_id uuid;
+  v_user_profile_id uuid;
 BEGIN
-  -- Insert the activity log
+  -- Map auth uid to profile id (if exists)
+  SELECT id INTO v_user_profile_id FROM user_profiles WHERE auth_id = p_user_auth_id LIMIT 1;
+
+  -- Insert the activity log (user_id may be NULL if mapping fails)
   INSERT INTO activity_logs (
     user_id, action_type, entity_type, entity_id, entity_name,
     old_values, new_values, changes, severity_level, success, error_message, metadata
   )
   VALUES (
-    p_user_id, p_action_type, p_entity_type, p_entity_id, p_entity_name,
+    v_user_profile_id, p_action_type, p_entity_type, p_entity_id, p_entity_name,
     p_old_values, p_new_values, p_changes, p_severity_level, p_success, p_error_message, p_metadata
   )
   RETURNING id INTO v_log_id;
 
-  -- IMPORTANT: Correct argument order for create_notification
+  -- Create notification (actor is the p_user_auth_id)
   PERFORM public.create_notification(
-    p_action_type,   -- action_type (text)
-    p_entity_id,     -- entity_id   (uuid)
-    p_entity_name,   -- entity_name (text)
-    p_entity_type,   -- entity_type (text)
-    p_user_id        -- actor_id    (uuid)
+    p_action_type,
+    p_entity_id,
+    p_entity_name,
+    p_entity_type,
+    p_user_auth_id,
+    NULL
   );
 
   RETURN v_log_id;
@@ -414,13 +500,326 @@ EXCEPTION
 END;
 $$;
 
-GRANT EXECUTE ON FUNCTION public.log_activity(
-  uuid, text, text, uuid, text, jsonb, jsonb, jsonb, text, boolean, text, jsonb
-) TO authenticated, anon;
+-- restore_deleted_asset: now validates and restores using FK asset_type uuid
+CREATE OR REPLACE FUNCTION public.restore_deleted_asset(deleted_asset_id uuid)
+RETURNS uuid
+LANGUAGE plpgsql
+SECURITY DEFINER
+SET search_path = public
+AS $$
+DECLARE
+  v_deleted_asset RECORD;
+  v_auth_id uuid;
+  v_user_profile_id uuid;
+  v_new_asset_id uuid;
+  v_sr_no integer;
+BEGIN
+  -- Get current user auth ID
+  v_auth_id := auth.uid();
 
--- -------------------------------------------------------------------
--- (Unchanged) JSONB diff helper, included for completeness
--- -------------------------------------------------------------------
+  -- Check if user is authenticated
+  IF v_auth_id IS NULL THEN
+    RAISE EXCEPTION 'User must be authenticated to restore assets';
+  END IF;
+
+  -- Get the user profile ID
+  SELECT id INTO v_user_profile_id
+  FROM user_profiles
+  WHERE auth_id = v_auth_id;
+
+  IF v_user_profile_id IS NULL THEN
+    RAISE EXCEPTION 'User profile not found';
+  END IF;
+
+  -- Get the deleted asset data
+  SELECT * INTO v_deleted_asset
+  FROM deleted_assets
+  WHERE id = deleted_asset_id AND restored = false;
+
+  IF NOT FOUND THEN
+    RAISE EXCEPTION 'Deleted asset not found or already restored';
+  END IF;
+
+  -- Check if user has HOD role (only HOD can restore assets)
+  IF NOT EXISTS (
+    SELECT 1 FROM user_profiles
+    WHERE id = v_user_profile_id AND role = 'HOD'
+  ) THEN
+    RAISE EXCEPTION 'Only HOD can restore deleted assets';
+  END IF;
+
+  -- Get next available sr_no (find max + 1)
+  SELECT COALESCE(MAX(sr_no), 0) + 1 INTO v_sr_no FROM assets;
+
+  -- Insert the asset back into assets table
+  INSERT INTO assets (
+    sr_no,
+    date,
+    name_of_supply,
+    asset_type,
+    invoice_number,
+    description,
+    rate,
+    remark,
+    is_consumable,
+    allocated_lab,
+    created_by,
+    approved,
+    approved_by,
+    approved_at,
+    approved_by_lab_incharge,
+    approved_at_lab_incharge
+  )
+  VALUES (
+    v_sr_no,
+    v_deleted_asset.date,
+    v_deleted_asset.name_of_supply,
+    v_deleted_asset.asset_type,
+    v_deleted_asset.invoice_number,
+    v_deleted_asset.description,
+    v_deleted_asset.rate,
+    v_deleted_asset.remark,
+    v_deleted_asset.is_consumable,
+    v_deleted_asset.allocated_lab,
+    v_deleted_asset.created_by,
+    v_deleted_asset.approved,
+    v_deleted_asset.approved_by,
+    v_deleted_asset.approved_at,
+    v_deleted_asset.approved_by_lab_incharge,
+    v_deleted_asset.approved_at_lab_incharge
+  )
+  RETURNING id INTO v_new_asset_id;
+
+  -- Update the deleted_assets record to mark as restored
+  UPDATE deleted_assets
+  SET
+    restored = true,
+    restored_at = now(),
+    restored_by = v_user_profile_id,
+    updated_at = now()
+  WHERE id = deleted_asset_id;
+
+  -- Log the restoration activity
+  PERFORM log_activity(
+    v_auth_id,
+    'restore',
+    'asset',
+    v_new_asset_id,
+    v_deleted_asset.name_of_supply,
+    NULL,
+    NULL,
+    NULL,
+    'info',
+    true,
+    NULL,
+    jsonb_build_object('original_deleted_asset_id', deleted_asset_id)
+  );
+
+  -- Return the new asset ID
+  RETURN v_new_asset_id;
+
+EXCEPTION
+  WHEN others THEN
+    RAISE EXCEPTION 'Failed to restore asset: %', SQLERRM;
+END;
+$$;
+
+-- update_user_password -> uses auth admin update (keeps behavior); requires proper service role on DB
+CREATE OR REPLACE FUNCTION public.update_user_password(p_auth_id uuid, p_new_password text)
+RETURNS void
+LANGUAGE plpgsql
+SECURITY DEFINER
+SET search_path = public
+AS $$
+DECLARE
+  v_user_email text;
+BEGIN
+  -- Check if the current user has admin privileges (HOD role)
+  IF NOT EXISTS (
+    SELECT 1 FROM user_profiles
+    WHERE auth_id = auth.uid() AND role = 'HOD'
+  ) THEN
+    RAISE EXCEPTION 'Only HOD can update user passwords';
+  END IF;
+
+  -- Get the user's email for potential password reset
+  SELECT email INTO v_user_email
+  FROM user_profiles
+  WHERE auth_id = p_auth_id;
+
+  IF v_user_email IS NULL THEN
+    RAISE EXCEPTION 'User not found';
+  END IF;
+
+  -- Try to update password using admin API (requires service role)
+  BEGIN
+    PERFORM auth.admin_update_user_by_id(p_auth_id, jsonb_build_object('password', p_new_password));
+  EXCEPTION
+    WHEN undefined_function THEN
+      RAISE EXCEPTION 'Admin API not available. Password updates require server-side implementation with service role key.';
+    WHEN insufficient_privilege THEN
+      RAISE EXCEPTION 'Insufficient privileges to update user password. Service role key required.';
+    WHEN others THEN
+      RAISE EXCEPTION 'Failed to update user password: %', SQLERRM;
+  END;
+END;
+$$;
+
+-- update_user_profile -> HOD only (unchanged logic but keep auth.uid() mapping)
+CREATE OR REPLACE FUNCTION public.update_user_profile(
+  p_user_id uuid,
+  p_name text DEFAULT NULL,
+  p_email text DEFAULT NULL,
+  p_role text DEFAULT NULL,
+  p_lab_id uuid DEFAULT NULL
+) RETURNS void
+LANGUAGE plpgsql
+SECURITY DEFINER
+SET search_path = public
+AS $$
+DECLARE
+  v_current_user_role user_role;
+  v_valid_role user_role;
+  v_old_data jsonb;
+  v_new_data jsonb;
+BEGIN
+  -- Check if the current user has HOD role
+  SELECT role INTO v_current_user_role
+  FROM user_profiles
+  WHERE auth_id = auth.uid();
+
+  IF v_current_user_role != 'HOD' THEN
+    RAISE EXCEPTION 'Only HOD can update user profiles';
+  END IF;
+
+  -- Validate and convert the role string to the enum type if provided
+  IF p_role IS NOT NULL THEN
+    BEGIN
+      v_valid_role := p_role::user_role;
+    EXCEPTION WHEN invalid_text_representation THEN
+      RAISE EXCEPTION 'Invalid role: %', p_role;
+    END;
+  END IF;
+
+  -- Get old data for logging
+  SELECT to_jsonb(user_profiles) INTO v_old_data
+  FROM user_profiles
+  WHERE id = p_user_id;
+
+  IF v_old_data IS NULL THEN
+    RAISE EXCEPTION 'User not found';
+  END IF;
+
+  -- Update the user profile
+  UPDATE user_profiles
+  SET
+    name = COALESCE(p_name, name),
+    email = COALESCE(p_email, email),
+    role = COALESCE(v_valid_role, role),
+    lab_id = p_lab_id,
+    updated_at = now()
+  WHERE id = p_user_id;
+
+  -- Get new data for logging
+  SELECT to_jsonb(user_profiles) INTO v_new_data
+  FROM user_profiles
+  WHERE id = p_user_id;
+
+  -- Log the update activity
+  PERFORM log_activity(
+    auth.uid(),
+    'update',
+    'user_profile',
+    p_user_id,
+    COALESCE(p_name, v_old_data->>'name'),
+    v_old_data,
+    v_new_data,
+    get_jsonb_diff(v_old_data, v_new_data),
+    'info',
+    true,
+    NULL,
+    jsonb_build_object('updated_by_hod', true)
+  );
+
+EXCEPTION
+  WHEN others THEN
+    RAISE EXCEPTION 'Failed to update user profile: %', SQLERRM;
+END;
+$$;
+
+-- delete_user_profile -> HOD only (unchanged logic but mapping)
+CREATE OR REPLACE FUNCTION public.delete_user_profile(p_user_id uuid)
+RETURNS void
+LANGUAGE plpgsql
+SECURITY DEFINER
+SET search_path = public
+AS $$
+DECLARE
+  v_current_user_role user_role;
+  v_user_auth_id uuid;
+  v_user_name text;
+  v_user_email text;
+  v_old_data jsonb;
+  v_related_records jsonb := '{}';
+BEGIN
+  -- Check if the current user has HOD role
+  SELECT role INTO v_current_user_role
+  FROM user_profiles
+  WHERE auth_id = auth.uid();
+
+  IF v_current_user_role != 'HOD' THEN
+    RAISE EXCEPTION 'Only HOD can delete user profiles';
+  END IF;
+
+  -- Get user details for logging
+  SELECT auth_id, name, email, to_jsonb(user_profiles) INTO v_user_auth_id, v_user_name, v_user_email, v_old_data
+  FROM user_profiles
+  WHERE id = p_user_id;
+
+  IF v_old_data IS NULL THEN
+    RAISE EXCEPTION 'User not found';
+  END IF;
+
+  -- Check for related records that would prevent deletion
+  SELECT jsonb_build_object(
+    'assets_created', (SELECT COUNT(*) FROM assets WHERE created_by = p_user_id),
+    'assets_approved', (SELECT COUNT(*) FROM assets WHERE approved_by = p_user_id),
+    'assets_approved_lab_incharge', (SELECT COUNT(*) FROM assets WHERE approved_by_lab_incharge = p_user_id),
+    'issues_reported', (SELECT COUNT(*) FROM asset_issues WHERE reported_by = p_user_id),
+    'issues_resolved', (SELECT COUNT(*) FROM asset_issues WHERE resolved_by = p_user_id),
+    'transfers_initiated', (SELECT COUNT(*) FROM asset_transfers WHERE initiated_by = p_user_id),
+    'transfers_approved', (SELECT COUNT(*) FROM asset_transfers WHERE approved_by_lab_incharge = p_user_id),
+    'transfers_received', (SELECT COUNT(*) FROM asset_transfers WHERE received_by = p_user_id),
+    'notifications_sent', (SELECT COUNT(*) FROM notifications WHERE actor_id = p_user_id),
+    'activity_logs', (SELECT COUNT(*) FROM activity_logs WHERE user_id = p_user_id)
+  ) INTO v_related_records;
+
+  -- Log the deletion activity with related records info
+  PERFORM log_activity(
+    auth.uid(),
+    'delete',
+    'user_profile',
+    p_user_id,
+    v_user_name,
+    v_old_data,
+    NULL,
+    NULL,
+    'warning',
+    true,
+    NULL,
+    jsonb_build_object('related_records', v_related_records, 'deleted_by_hod', true)
+  );
+
+  -- Delete the user profile
+  DELETE FROM user_profiles WHERE id = p_user_id;
+
+EXCEPTION
+  WHEN others THEN
+    RAISE EXCEPTION 'Failed to delete user profile: %', SQLERRM;
+END;
+$$;
+
+-- JSONB diff helper
 CREATE OR REPLACE FUNCTION public.get_jsonb_diff(old_data jsonb, new_data jsonb)
 RETURNS jsonb
 LANGUAGE plpgsql
@@ -455,22 +854,21 @@ BEGIN
 END;
 $$;
 
--- Trigger function for user_profiles table
+-- Trigger function for user_profiles table (audit)
 CREATE OR REPLACE FUNCTION trg_user_profiles_audit() RETURNS TRIGGER AS $$
 DECLARE
-  v_actor_id uuid;
+  v_actor_auth_id uuid;
   v_old_data jsonb;
   v_new_data jsonb;
   v_changes jsonb;
 BEGIN
-  -- Get actor ID from current session
-  v_actor_id := auth.uid();
+  -- Get actor auth id from current session
+  v_actor_auth_id := auth.uid();
   
   IF TG_OP = 'INSERT' THEN
-    -- Log creation
     v_new_data := to_jsonb(NEW);
     PERFORM log_activity(
-      v_actor_id,
+      v_actor_auth_id,
       'insert',
       'user_profile',
       NEW.id,
@@ -483,13 +881,12 @@ BEGIN
     );
     
   ELSIF TG_OP = 'UPDATE' THEN
-    -- Log update
     v_old_data := to_jsonb(OLD);
     v_new_data := to_jsonb(NEW);
     v_changes := get_jsonb_diff(v_old_data, v_new_data);
     
     PERFORM log_activity(
-      v_actor_id,
+      v_actor_auth_id,
       'update',
       'user_profile',
       NEW.id,
@@ -502,10 +899,9 @@ BEGIN
     );
     
   ELSIF TG_OP = 'DELETE' THEN
-    -- Log deletion
     v_old_data := to_jsonb(OLD);
     PERFORM log_activity(
-      v_actor_id,
+      v_actor_auth_id,
       'delete',
       'user_profile',
       OLD.id,
@@ -525,19 +921,17 @@ $$ LANGUAGE plpgsql;
 -- Trigger function for assets table
 CREATE OR REPLACE FUNCTION trg_assets_audit() RETURNS TRIGGER AS $$
 DECLARE
-  v_actor_id uuid;
+  v_actor_auth_id uuid;
   v_old_data jsonb;
   v_new_data jsonb;
   v_changes jsonb;
 BEGIN
-  -- Get actor ID from current session
-  v_actor_id := auth.uid();
+  v_actor_auth_id := auth.uid();
   
   IF TG_OP = 'INSERT' THEN
-    -- Log creation
     v_new_data := to_jsonb(NEW);
     PERFORM log_activity(
-      v_actor_id,
+      v_actor_auth_id,
       'insert',
       'asset',
       NEW.id,
@@ -550,15 +944,13 @@ BEGIN
     );
     
   ELSIF TG_OP = 'UPDATE' THEN
-    -- Log update
     v_old_data := to_jsonb(OLD);
     v_new_data := to_jsonb(NEW);
     v_changes := get_jsonb_diff(v_old_data, v_new_data);
     
-    -- Check if this is an approval action
     IF OLD.approved = false AND NEW.approved = true THEN
       PERFORM log_activity(
-        v_actor_id,
+        v_actor_auth_id,
         'approve',
         'asset',
         NEW.id,
@@ -571,7 +963,7 @@ BEGIN
       );
     ELSE
       PERFORM log_activity(
-        v_actor_id,
+        v_actor_auth_id,
         'update',
         'asset',
         NEW.id,
@@ -585,10 +977,9 @@ BEGIN
     END IF;
     
   ELSIF TG_OP = 'DELETE' THEN
-    -- Log deletion
     v_old_data := to_jsonb(OLD);
     PERFORM log_activity(
-      v_actor_id,
+      v_actor_auth_id,
       'delete',
       'asset',
       OLD.id,
@@ -605,30 +996,22 @@ BEGIN
 END;
 $$ LANGUAGE plpgsql;
 
--- Trigger function for asset_issues table
+-- Trigger function for asset_issues
 CREATE OR REPLACE FUNCTION trg_asset_issues_audit() RETURNS TRIGGER AS $$
 DECLARE
-  v_actor_id uuid;
+  v_actor_auth_id uuid;
   v_old_data jsonb;
   v_new_data jsonb;
   v_changes jsonb;
   v_asset_name text;
 BEGIN
-  -- Get actor ID from current session
-  v_actor_id := auth.uid();
+  v_actor_auth_id := auth.uid();
 
-  -- Get asset name - ensure we get the correct asset name
   IF TG_OP = 'INSERT' THEN
     SELECT name_of_supply INTO v_asset_name FROM assets WHERE id = NEW.asset_id;
-  ELSE
-    SELECT name_of_supply INTO v_asset_name FROM assets WHERE id = COALESCE(NEW.asset_id, OLD.asset_id);
-  END IF;
-
-  IF TG_OP = 'INSERT' THEN
-    -- Log creation with asset name
     v_new_data := to_jsonb(NEW);
     PERFORM log_activity(
-      v_actor_id,
+      v_actor_auth_id,
       'report',
       'issue',
       NEW.id,
@@ -641,15 +1024,13 @@ BEGIN
     );
 
   ELSIF TG_OP = 'UPDATE' THEN
-    -- Log update
     v_old_data := to_jsonb(OLD);
     v_new_data := to_jsonb(NEW);
     v_changes := get_jsonb_diff(v_old_data, v_new_data);
 
-    -- Check if this is a resolution action
     IF OLD.status = 'open' AND NEW.status = 'resolved' THEN
       PERFORM log_activity(
-        v_actor_id,
+        v_actor_auth_id,
         'resolve',
         'issue',
         NEW.id,
@@ -662,7 +1043,7 @@ BEGIN
       );
     ELSE
       PERFORM log_activity(
-        v_actor_id,
+        v_actor_auth_id,
         'update',
         'issue',
         NEW.id,
@@ -676,10 +1057,10 @@ BEGIN
     END IF;
 
   ELSIF TG_OP = 'DELETE' THEN
-    -- Log deletion
+    SELECT name_of_supply INTO v_asset_name FROM assets WHERE id = OLD.asset_id;
     v_old_data := to_jsonb(OLD);
     PERFORM log_activity(
-      v_actor_id,
+      v_actor_auth_id,
       'delete',
       'issue',
       OLD.id,
@@ -696,26 +1077,22 @@ BEGIN
 END;
 $$ LANGUAGE plpgsql;
 
--- Trigger function for asset_transfers table
+-- Trigger function for asset_transfers
 CREATE OR REPLACE FUNCTION trg_asset_transfers_audit() RETURNS TRIGGER AS $$
 DECLARE
-  v_actor_id uuid;
+  v_actor_auth_id uuid;
   v_old_data jsonb;
   v_new_data jsonb;
   v_changes jsonb;
   v_asset_name text;
 BEGIN
-  -- Get actor ID from current session
-  v_actor_id := auth.uid();
-  
-  -- Get asset name
+  v_actor_auth_id := auth.uid();
   SELECT name_of_supply INTO v_asset_name FROM assets WHERE id = COALESCE(NEW.asset_id, OLD.asset_id);
-  
+
   IF TG_OP = 'INSERT' THEN
-    -- Log creation
     v_new_data := to_jsonb(NEW);
     PERFORM log_activity(
-      v_actor_id,
+      v_actor_auth_id,
       'transfer',
       'transfer',
       NEW.id,
@@ -728,15 +1105,13 @@ BEGIN
     );
     
   ELSIF TG_OP = 'UPDATE' THEN
-    -- Log update
     v_old_data := to_jsonb(OLD);
     v_new_data := to_jsonb(NEW);
     v_changes := get_jsonb_diff(v_old_data, v_new_data);
 
-    -- Check if this is an approval action
     IF OLD.status = 'pending' AND NEW.status = 'approved' THEN
       PERFORM log_activity(
-        v_actor_id,
+        v_actor_auth_id,
         'approve',
         'transfer',
         NEW.id,
@@ -747,10 +1122,9 @@ BEGIN
         'info',
         true
       );
-    -- Check if this is a receive action
     ELSIF OLD.status = 'approved' AND NEW.status = 'received' THEN
       PERFORM log_activity(
-        v_actor_id,
+        v_actor_auth_id,
         'receive',
         'transfer',
         NEW.id,
@@ -763,7 +1137,7 @@ BEGIN
       );
     ELSE
       PERFORM log_activity(
-        v_actor_id,
+        v_actor_auth_id,
         'update',
         'transfer',
         NEW.id,
@@ -777,10 +1151,9 @@ BEGIN
     END IF;
     
   ELSIF TG_OP = 'DELETE' THEN
-    -- Log deletion
     v_old_data := to_jsonb(OLD);
     PERFORM log_activity(
-      v_actor_id,
+      v_actor_auth_id,
       'delete',
       'transfer',
       OLD.id,
@@ -797,7 +1170,9 @@ BEGIN
 END;
 $$ LANGUAGE plpgsql;
 
--- Create triggers for all tables
+-- ===================================================================
+-- TRIGGERS
+-- ===================================================================
 CREATE TRIGGER trg_assets_set_asset_id
   BEFORE INSERT ON assets
   FOR EACH ROW EXECUTE FUNCTION set_asset_id();
@@ -805,6 +1180,10 @@ CREATE TRIGGER trg_assets_set_asset_id
 CREATE TRIGGER trg_update_asset_ids_on_lab_change
   AFTER UPDATE OF lab_identifier ON labs
   FOR EACH ROW EXECUTE FUNCTION trg_update_asset_ids_on_lab_change();
+
+CREATE TRIGGER trg_update_asset_id_on_allocated_lab_or_type_change
+  BEFORE UPDATE ON assets
+  FOR EACH ROW EXECUTE FUNCTION trg_update_asset_id_on_allocated_lab_or_type_change();
 
 CREATE TRIGGER trg_user_profiles_audit 
   AFTER INSERT OR UPDATE OR DELETE ON user_profiles
@@ -831,6 +1210,10 @@ CREATE TRIGGER trg_up_asset_issues BEFORE UPDATE ON asset_issues
   FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();
 CREATE TRIGGER trg_up_asset_transfers BEFORE UPDATE ON asset_transfers
   FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();
+CREATE TRIGGER trg_up_asset_types BEFORE UPDATE ON asset_types
+  FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();
+CREATE TRIGGER trg_up_deleted_assets BEFORE UPDATE ON deleted_assets
+  FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();
 
 -- ===================================================================
 -- RLS POLICIES
@@ -842,6 +1225,8 @@ ALTER TABLE asset_issues ENABLE ROW LEVEL SECURITY;
 ALTER TABLE asset_transfers ENABLE ROW LEVEL SECURITY;
 ALTER TABLE notifications ENABLE ROW LEVEL SECURITY;
 ALTER TABLE activity_logs ENABLE ROW LEVEL SECURITY;
+ALTER TABLE asset_types ENABLE ROW LEVEL SECURITY;       -- enabled
+ALTER TABLE deleted_assets ENABLE ROW LEVEL SECURITY;    -- enabled
 
 -- labs: Allow authenticated users to select all labs
 CREATE POLICY labs_select_all ON labs
@@ -862,25 +1247,46 @@ CREATE POLICY labs_delete_all ON labs
 -- user_profiles: All authenticated users can see all profiles
 CREATE POLICY user_profiles_select_all ON user_profiles
   FOR SELECT USING (true);
+
 CREATE POLICY user_profiles_update_own ON user_profiles
   FOR UPDATE USING (auth_id = auth.uid());
+
 CREATE POLICY user_profiles_insert_admin ON user_profiles
-  FOR INSERT WITH CHECK (true); -- System-level inserts only
+  FOR INSERT WITH CHECK (true);
+
 CREATE POLICY user_profiles_insert_system ON user_profiles
-  FOR INSERT WITH CHECK (true); -- Allow all inserts for system functions
+  FOR INSERT WITH CHECK (true);
+
+-- asset_types: select allowed to all authenticated
+CREATE POLICY asset_types_select_all ON asset_types
+  FOR SELECT USING (true);
+
+-- Only HODs can insert/update/delete asset types
+CREATE POLICY asset_types_write_hod ON asset_types
+  FOR ALL TO authenticated
+  USING (
+    EXISTS (
+      SELECT 1 FROM user_profiles WHERE auth_id = auth.uid() AND role = 'HOD'
+    )
+  )
+  WITH CHECK (
+    EXISTS (
+      SELECT 1 FROM user_profiles WHERE auth_id = auth.uid() AND role = 'HOD'
+    )
+  );
 
 -- assets: All users can see all assets
 CREATE POLICY assets_all ON assets
   FOR SELECT USING (true);
 
--- assets: Allow insert for authenticated users whose lab_id matches allocated_lab
+-- assets: Insert allowed if user's lab_id matches allocated_lab
 CREATE POLICY assets_insert_authenticated ON assets
   FOR INSERT TO authenticated
   WITH CHECK (
     (SELECT lab_id FROM user_profiles WHERE auth_id = auth.uid()) = allocated_lab
   );
 
--- assets: Allow update and delete only if user is Lab Assistant and user's lab_id matches allocated_lab
+-- assets: Allow update and delete only if user is Lab Assistant and matches lab
 CREATE POLICY assets_update_lab_assistant ON assets
   FOR UPDATE TO authenticated
   USING (
@@ -1020,13 +1426,50 @@ CREATE POLICY issues_delete_lab_incharge ON asset_issues
 CREATE POLICY transfers_all ON asset_transfers
   FOR ALL USING (true) WITH CHECK (true);
 
--- notifications: All users can see all notifications
+-- notifications: All users can see their notifications; keep demonstration simple: allow selecting all
 CREATE POLICY notifications_all ON notifications
-  FOR ALL USING (true);
+  FOR SELECT USING (true);
 
--- activity_logs: All users can see all logs
-CREATE POLICY logs_all ON activity_logs
-  FOR ALL USING (true);
+-- activity_logs: restrict insert/update via functions only - SELECT open to service_role/admins in app
+CREATE POLICY logs_all_select ON activity_logs
+  FOR SELECT USING (true);
+
+-- deleted_assets: select allowed for authenticated (could be restricted further)
+CREATE POLICY deleted_assets_select_all ON deleted_assets
+  FOR SELECT USING (true);
+
+-- deleted_assets: Insert allowed for authenticated users (when deleting an asset)
+CREATE POLICY deleted_assets_insert_authenticated ON deleted_assets
+  FOR INSERT TO authenticated
+  WITH CHECK (auth.uid() IS NOT NULL);
+
+-- deleted_assets: Update and approve only by HOD or Lab Incharge
+CREATE POLICY deleted_assets_update_roles ON deleted_assets
+  FOR UPDATE TO authenticated
+  USING (
+    EXISTS (
+      SELECT 1 FROM user_profiles
+      WHERE auth_id = auth.uid()
+        AND role IN ('HOD','Lab Incharge')
+    )
+  )
+  WITH CHECK (
+    EXISTS (
+      SELECT 1 FROM user_profiles
+      WHERE auth_id = auth.uid()
+        AND role IN ('HOD','Lab Incharge')
+    )
+  );
+
+-- deleted_assets: Delete only by HOD
+CREATE POLICY deleted_assets_delete_hod ON deleted_assets
+  FOR DELETE TO authenticated
+  USING (
+    EXISTS (
+      SELECT 1 FROM user_profiles
+      WHERE auth_id = auth.uid() AND role = 'HOD'
+    )
+  );
 
 -- ===================================================================
 -- GRANTS
@@ -1039,11 +1482,35 @@ GRANT USAGE, SELECT ON ALL SEQUENCES IN SCHEMA public TO authenticated;
 GRANT ALL PRIVILEGES ON ALL TABLES IN SCHEMA public TO service_role;
 GRANT ALL PRIVILEGES ON ALL SEQUENCES IN SCHEMA public TO service_role;
 
+-- Grant execute on important functions to authenticated and anon where appropriate
+GRANT EXECUTE ON FUNCTION create_user_profile(uuid, text, text, text, uuid) TO authenticated, anon;
+GRANT EXECUTE ON FUNCTION public.create_notification(text, uuid, text, text, uuid, uuid) TO authenticated, anon;
+GRANT EXECUTE ON FUNCTION public.log_activity(uuid, text, text, uuid, text, jsonb, jsonb, jsonb, text, boolean, text, jsonb) TO authenticated, anon;
+GRANT EXECUTE ON FUNCTION public.restore_deleted_asset(uuid) TO authenticated;
+GRANT EXECUTE ON FUNCTION public.update_user_password(uuid, text) TO authenticated;
+GRANT EXECUTE ON FUNCTION public.update_user_profile(uuid, text, text, text, uuid) TO authenticated;
+GRANT EXECUTE ON FUNCTION public.delete_user_profile(uuid) TO authenticated;
+
 -- ===================================================================
--- SAMPLE DATA 
+-- SAMPLE DATA
 -- ===================================================================
 
--- Insert sample labs (must be inserted first due to foreign key constraints)
+-- Insert sample asset types
+INSERT INTO asset_types (name, identifier, created_by) VALUES
+('CPU', 'PC', NULL),
+('Printer', 'PR', NULL),
+('Network Equipment', 'NW', NULL),
+('Peripheral', 'PE', NULL),
+('Microcontroller', 'MC', NULL),
+('Monitor', 'MO', NULL),
+('Mouse', 'MS', NULL),
+('Keyboard', 'KB', NULL),
+('Scanner', 'SC', NULL),
+('Projector', 'PJ', NULL),
+('Laptop', 'LP', NULL),
+('Other', 'OT', NULL);
+
+-- Insert sample labs
 INSERT INTO labs (name, description, location, lab_identifier, created_at, updated_at) VALUES
 ('Computer Science Lab 01', 'Main computer lab with 50 workstations and servers', 'Building A, Room 101', 'CSLAB01', '2024-01-15T10:00:00Z', '2024-03-20T14:30:00Z'),
 ('Mechanical Engineering Lab', 'Advanced mechanical engineering research lab', 'Building B, Room 205', 'MELAB01', '2024-02-10T09:15:00Z', '2024-03-25T11:45:00Z'),
@@ -1054,44 +1521,70 @@ INSERT INTO labs (name, description, location, lab_identifier, created_at, updat
 -- Insert sample user profiles
 INSERT INTO user_profiles (auth_id, email, role, name, lab_id) VALUES
 ('e078b459-f866-44a9-8127-fc3bcb778770', 'hod@university.edu', 'HOD', 'Dr. John Smith', NULL),
-('541bb60e-5a34-49a3-8409-16cffda1c6a4', 'labassistant@university.edu', 'Lab Assistant', 'Alice Johnson', (SELECT id FROM labs WHERE name = 'Computer Science Lab 01')),
-('1cf5e152-3095-4d71-9b63-1fa5f7ac17c4', 'labincharge@university.edu', 'Lab Incharge', 'Prof. Robert Williams', (SELECT id FROM labs WHERE name = 'Computer Science Lab 01')),
-('88707405-9741-4cce-8ed4-3b51eaa41ca7', 'labassistant2@university.edu', 'Lab Assistant', 'Bob Davis', (SELECT id FROM labs WHERE name = 'Mechanical Engineering Lab')),
-('20d6668d-17af-4135-b714-9cdc77d1e327', 'labincharge2@university.edu', 'Lab Incharge', 'Dr. Sarah Miller', (SELECT id FROM labs WHERE name = 'Mechanical Engineering Lab'));
+('541bb60e-5a34-49a3-8409-16cffda1c6a4', 'alice.johnson@university.edu', 'Lab Assistant', 'Alice Johnson', (SELECT id FROM labs WHERE lab_identifier = 'CSLAB01')),
+('1cf5e152-3095-4d71-9b63-1fa5f7ac17c4', 'robert.williams@university.edu', 'Lab Incharge', 'Prof. Robert Williams', (SELECT id FROM labs WHERE lab_identifier = 'CSLAB01')),
+('88707405-9741-4cce-8ed4-3b51eaa41ca7', 'bob.davis@university.edu', 'Lab Assistant', 'Bob Davis', (SELECT id FROM labs WHERE lab_identifier = 'MELAB01')),
+('20d6668d-17af-4135-b714-9cdc77d1e327', 'sarah.miller@university.edu', 'Lab Incharge', 'Dr. Sarah Miller', (SELECT id FROM labs WHERE lab_identifier = 'MELAB01')),
+('3f8e4c2a-7b9d-4e1f-8a6c-5d2b3f4e5a6b', 'mike.wilson@university.edu', 'Lab Assistant', 'Mike Wilson', (SELECT id FROM labs WHERE lab_identifier = 'ELECLAB01')),
+('4a7b5c8d-9e2f-4a3b-8c7d-6e4f5a8b9c0d', 'lisa.brown@university.edu', 'Lab Incharge', 'Dr. Lisa Brown', (SELECT id FROM labs WHERE lab_identifier = 'ELECLAB01')),
+('5b8c6d9e-0f3a-4b5c-9d8e-7f5a6b9c0d1e', 'david.lee@university.edu', 'Lab Assistant', 'David Lee', (SELECT id FROM labs WHERE lab_identifier = 'PHYSLAB01')),
+('6c9d7e0f-1a4b-5c6d-0e9f-8a6b7c0d1e2f', 'anna.garcia@university.edu', 'Lab Incharge', 'Prof. Anna Garcia', (SELECT id FROM labs WHERE lab_identifier = 'PHYSLAB01')),
+('7d0e8f1a-2b5c-6d7e-1f0a-9b7c8d0e1f2a', 'james.taylor@university.edu', 'Lab Assistant', 'James Taylor', (SELECT id FROM labs WHERE lab_identifier = 'CHEMLAB01')),
+('8e1f9a2b-3c6d-7e8f-2a1b-0c8d9e1f2a3b', 'maria.rodriguez@university.edu', 'Lab Incharge', 'Dr. Maria Rodriguez', (SELECT id FROM labs WHERE lab_identifier = 'CHEMLAB01'));
 
--- Update labs with incharge information
--- Removed lab incharge updates as incharge_id column no longer exists
+-- Additional dummy data for lab assistants and lab incharges (for testing)
+INSERT INTO user_profiles (auth_id, email, role, name, lab_id) VALUES
+('9f2a3b4c-5d6e-7f8a-9b0c-1d2e3f4a5b6c', 'assistant.cs@university.edu', 'Lab Assistant', 'John Assistant', (SELECT id FROM labs WHERE lab_identifier = 'CSLAB01')),
+('0a1b2c3d-4e5f-6a7b-8c9d-0e1f2a3b4c5d', 'incharge.cs@university.edu', 'Lab Incharge', 'Dr. Jane Incharge', (SELECT id FROM labs WHERE lab_identifier = 'CSLAB01')),
+('1b2c3d4e-5f6a-7b8c-9d0e-1f2a3b4c5d6e', 'assistant.me@university.edu', 'Lab Assistant', 'Mike Assistant', (SELECT id FROM labs WHERE lab_identifier = 'MELAB01')),
+('2c3d4e5f-6a7b-8c9d-0e1f-2a3b4c5d6e7f', 'incharge.me@university.edu', 'Lab Incharge', 'Prof. Mary Incharge', (SELECT id FROM labs WHERE lab_identifier = 'MELAB01')),
+('3d4e5f6a-7b8c-9d0e-1f2a-3b4c5d6e7f8a', 'assistant.el@university.edu', 'Lab Assistant', 'Alex Assistant', (SELECT id FROM labs WHERE lab_identifier = 'ELECLAB01')),
+('4e5f6a7b-8c9d-0e1f-2a3b-4c5d6e7f8a9b', 'incharge.el@university.edu', 'Lab Incharge', 'Dr. Sam Incharge', (SELECT id FROM labs WHERE lab_identifier = 'ELECLAB01')),
+('5f6a7b8c-9d0e-1f2a-3b4c-5d6e7f8a9b0c', 'assistant.ph@university.edu', 'Lab Assistant', 'Chris Assistant', (SELECT id FROM labs WHERE lab_identifier = 'PHYSLAB01')),
+('6a7b8c9d-0e1f-2a3b-4c5d-6e7f8a9b0c1d', 'incharge.ph@university.edu', 'Lab Incharge', 'Prof. Pat Incharge', (SELECT id FROM labs WHERE lab_identifier = 'PHYSLAB01')),
+('7b8c9d0e-1f2a-3b4c-5d6e-7f8a9b0c1d2e', 'assistant.ch@university.edu', 'Lab Assistant', 'Taylor Assistant', (SELECT id FROM labs WHERE lab_identifier = 'CHEMLAB01')),
+('8c9d0e1f-2a3b-4c5d-6e7f-8a9b0c1d2e3f', 'incharge.ch@university.edu', 'Lab Incharge', 'Dr. Jordan Incharge', (SELECT id FROM labs WHERE lab_identifier = 'CHEMLAB01'));
 
--- Insert sample assets (this will trigger logs and notifications)
--- Note: asset_id is automatically generated by the trigger, so we dont include it in the INSERT
-INSERT INTO assets (date, name_of_supply, asset_type, invoice_number, description, rate, allocated_lab, created_by, approved, approved_by, approved_by_lab_incharge) VALUES
-('2024-01-15', 'Dell OptiPlex 7090', 'cpu', 'INV-2024-001', 'Desktop Computer Intel i7, 16GB RAM, 512GB SSD', 75000.00, (SELECT id FROM labs WHERE lab_identifier = 'CSLAB01'),
+-- Insert sample assets (using asset_types by identifier via subselect)
+INSERT INTO assets (date, name_of_supply, asset_type, invoice_number, description, rate, is_consumable, allocated_lab, created_by, approved, approved_by, approved_by_lab_incharge) VALUES
+('2024-01-15', 'Dell OptiPlex 7090', (SELECT id FROM asset_types WHERE identifier = 'PC' LIMIT 1), 'INV-2024-001', 'Desktop Computer Intel i7, 16GB RAM, 512GB SSD', 75000.00, false, (SELECT id FROM labs WHERE lab_identifier = 'CSLAB01'),
  (SELECT id FROM user_profiles WHERE name = 'Alice Johnson'), true,
  (SELECT id FROM user_profiles WHERE name = 'Dr. John Smith'),
  (SELECT id FROM user_profiles WHERE name = 'Prof. Robert Williams')),
 
-('2024-01-20', 'HP LaserJet Pro M404dn', 'printer', 'INV-2024-002', 'Laser Printer Monochrome', 25000.00, (SELECT id FROM labs WHERE lab_identifier = 'CSLAB01'),
+('2024-01-20', 'HP LaserJet Pro M404dn', (SELECT id FROM asset_types WHERE identifier = 'PR' LIMIT 1), 'INV-2024-002', 'Laser Printer Monochrome', 25000.00, false, (SELECT id FROM labs WHERE lab_identifier = 'CSLAB01'),
  (SELECT id FROM user_profiles WHERE name = 'Alice Johnson'), true,
  (SELECT id FROM user_profiles WHERE name = 'Dr. John Smith'),
  (SELECT id FROM user_profiles WHERE name = 'Prof. Robert Williams')),
 
-('2024-01-25', 'Cisco Catalyst 2960-X', 'network', 'INV-2024-003', 'Network Switch 48-port', 45000.00, (SELECT id FROM labs WHERE lab_identifier = 'CSLAB01'),
+('2024-01-25', 'Cisco Catalyst 2960-X', (SELECT id FROM asset_types WHERE identifier = 'NW' LIMIT 1), 'INV-2024-003', 'Network Switch 48-port', 45000.00, false, (SELECT id FROM labs WHERE lab_identifier = 'CSLAB01'),
  (SELECT id FROM user_profiles WHERE name = 'Alice Johnson'), true,
  (SELECT id FROM user_profiles WHERE name = 'Dr. John Smith'),
  (SELECT id FROM user_profiles WHERE name = 'Prof. Robert Williams')),
 
-('2024-02-01', 'Logitech C920 HD Pro', 'peripheral', 'INV-2024-004', 'Webcam Full HD 1080p', 8000.00, (SELECT id FROM labs WHERE lab_identifier = 'MELAB01'),
+('2024-02-01', 'Logitech C920 HD Pro', (SELECT id FROM asset_types WHERE identifier = 'PE' LIMIT 1), 'INV-2024-004', 'Webcam Full HD 1080p', 8000.00, false, (SELECT id FROM labs WHERE lab_identifier = 'MELAB01'),
  (SELECT id FROM user_profiles WHERE name = 'Bob Davis'), true,
  (SELECT id FROM user_profiles WHERE name = 'Dr. John Smith'),
  (SELECT id FROM user_profiles WHERE name = 'Dr. Sarah Miller')),
 
-('2024-02-10', 'Arduino Uno R3', 'microcontroller', 'INV-2024-005', 'Microcontroller Board', 1500.00, (SELECT id FROM labs WHERE lab_identifier = 'MELAB01'),
+('2024-02-10', 'Arduino Uno R3', (SELECT id FROM asset_types WHERE identifier = 'MC' LIMIT 1), 'INV-2024-005', 'Microcontroller Board', 1500.00, false, (SELECT id FROM labs WHERE lab_identifier = 'MELAB01'),
+ (SELECT id FROM user_profiles WHERE name = 'Bob Davis'), true,
+ (SELECT id FROM user_profiles WHERE name = 'Dr. John Smith'),
+ (SELECT id FROM user_profiles WHERE name = 'Dr. Sarah Miller')),
+
+('2024-02-15', 'Lab Consumables Kit', (SELECT id FROM asset_types WHERE identifier = 'OT' LIMIT 1), 'INV-2024-006', 'Various lab consumables including cables, connectors, and components', 5000.00, true, (SELECT id FROM labs WHERE lab_identifier = 'ELECLAB01'),
+ (SELECT id FROM user_profiles WHERE name = 'Alice Johnson'), true,
+ (SELECT id FROM user_profiles WHERE name = 'Dr. John Smith'),
+ (SELECT id FROM user_profiles WHERE name = 'Prof. Robert Williams')),
+
+('2024-02-20', 'Chemical Reagents Set', (SELECT id FROM asset_types WHERE identifier = 'OT' LIMIT 1), 'INV-2024-007', 'Basic chemical reagents for experiments', 12000.00, true, (SELECT id FROM labs WHERE lab_identifier = 'CHEMLAB01'),
  (SELECT id FROM user_profiles WHERE name = 'Bob Davis'), true,
  (SELECT id FROM user_profiles WHERE name = 'Dr. John Smith'),
  (SELECT id FROM user_profiles WHERE name = 'Dr. Sarah Miller'));
 
+-- After assets inserted, asset_id triggers will have set asset_id values
+
 -- Insert sample asset issues
--- Reference assets by their ID (the trigger will automatically generate asset_id for new assets)
 INSERT INTO asset_issues (asset_id, issue_description, reported_by, status) VALUES
 ((SELECT id FROM assets WHERE name_of_supply = 'Dell OptiPlex 7090' LIMIT 1), 
  'Computer not booting, showing blue screen error', 
@@ -1112,43 +1605,145 @@ INSERT INTO asset_transfers (asset_id, from_lab, to_lab, initiated_by, status) V
  (SELECT id FROM labs WHERE lab_identifier = 'CSLAB01'),
  (SELECT id FROM user_profiles WHERE name = 'Dr. Sarah Miller'), 'pending');
 
--- Manual log entries for system events
+-- Manual log entries for system events (map to user_profiles.id)
 INSERT INTO activity_logs (user_id, action_type, entity_type, entity_id, entity_name, severity_level, success, created_at) VALUES
-((SELECT auth_id FROM user_profiles WHERE name = 'Alice Johnson'), 'login', 'system', NULL, 'User Login', 'info', true, '2024-01-15 09:00:00'),
-((SELECT auth_id FROM user_profiles WHERE name = 'Dr. John Smith'), 'login', 'system', NULL, 'User Login', 'info', true, '2024-01-15 09:15:00'),
-((SELECT auth_id FROM user_profiles WHERE name = 'Prof. Robert Williams'), 'login', 'system', NULL, 'User Login', 'info', true, '2024-01-16 09:00:00'),
-((SELECT auth_id FROM user_profiles WHERE name = 'Bob Davis'), 'login', 'system', NULL, 'User Login', 'info', true, '2024-01-17 08:45:00'),
-((SELECT auth_id FROM user_profiles WHERE name = 'Dr. Sarah Miller'), 'login', 'system', NULL, 'User Login', 'info', true, '2024-01-17 09:30:00');
+((SELECT id FROM user_profiles WHERE name = 'Alice Johnson'), 'login', 'system', NULL, 'User Login', 'info', true, '2024-01-15 09:00:00'),
+((SELECT id FROM user_profiles WHERE name = 'Dr. John Smith'), 'login', 'system', NULL, 'User Login', 'info', true, '2024-01-15 09:15:00'),
+((SELECT id FROM user_profiles WHERE name = 'Prof. Robert Williams'), 'login', 'system', NULL, 'User Login', 'info', true, '2024-01-16 09:00:00'),
+((SELECT id FROM user_profiles WHERE name = 'Bob Davis'), 'login', 'system', NULL, 'User Login', 'info', true, '2024-01-17 08:45:00'),
+((SELECT id FROM user_profiles WHERE name = 'Dr. Sarah Miller'), 'login', 'system', NULL, 'User Login', 'info', true, '2024-01-17 09:30:00'),
+((SELECT id FROM user_profiles WHERE name = 'Mike Wilson'), 'login', 'system', NULL, 'User Login', 'info', true, '2024-01-18 08:30:00'),
+((SELECT id FROM user_profiles WHERE name = 'Dr. Lisa Brown'), 'login', 'system', NULL, 'User Login', 'info', true, '2024-01-18 09:00:00'),
+((SELECT id FROM user_profiles WHERE name = 'David Lee'), 'login', 'system', NULL, 'User Login', 'info', true, '2024-01-19 08:45:00'),
+((SELECT id FROM user_profiles WHERE name = 'Prof. Anna Garcia'), 'login', 'system', NULL, 'User Login', 'info', true, '2024-01-19 09:15:00'),
+((SELECT id FROM user_profiles WHERE name = 'James Taylor'), 'login', 'system', NULL, 'User Login', 'info', true, '2024-01-20 08:30:00'),
+((SELECT id FROM user_profiles WHERE name = 'Dr. Maria Rodriguez'), 'login', 'system', NULL, 'User Login', 'info', true, '2024-01-20 09:00:00');
 
-
--- Manual notification entries
+-- Manual notification entries (map to user_profiles.id)
 INSERT INTO notifications (user_id, actor_id, action_type, entity_type, entity_id, entity_name, message, is_read, created_at) VALUES
-((SELECT auth_id FROM user_profiles WHERE name = 'Dr. John Smith'), 
- (SELECT auth_id FROM user_profiles WHERE name = 'Alice Johnson'),
- 'created', 'asset', 
+((SELECT id FROM user_profiles WHERE name = 'Dr. John Smith'),
+ (SELECT id FROM user_profiles WHERE name = 'Alice Johnson'),
+ 'created', 'asset',
  (SELECT id FROM assets WHERE name_of_supply = 'Dell OptiPlex 7090' LIMIT 1),
  'Dell OptiPlex 7090', 'New asset created: Dell OptiPlex 7090', false, '2024-01-15 10:30:00'),
 
-((SELECT auth_id FROM user_profiles WHERE name = 'Alice Johnson'), 
- (SELECT auth_id FROM user_profiles WHERE name = 'Dr. John Smith'),
- 'approved', 'asset', 
+((SELECT id FROM user_profiles WHERE name = 'Alice Johnson'),
+ (SELECT id FROM user_profiles WHERE name = 'Dr. John Smith'),
+ 'approved', 'asset',
  (SELECT id FROM assets WHERE name_of_supply = 'Dell OptiPlex 7090' LIMIT 1),
  'Dell OptiPlex 7090', 'Asset approved: Dell OptiPlex 7090', false, '2024-01-15 11:00:00'),
 
-((SELECT auth_id FROM user_profiles WHERE name = 'Prof. Robert Williams'), 
- (SELECT auth_id FROM user_profiles WHERE name = 'Prof. Robert Williams'),
- 'created', 'issue', 
+((SELECT id FROM user_profiles WHERE name = 'Prof. Robert Williams'),
+ (SELECT id FROM user_profiles WHERE name = 'Prof. Robert Williams'),
+ 'created', 'issue',
  (SELECT id FROM asset_issues WHERE issue_description LIKE '%Computer not booting%' LIMIT 1),
  'Issue #', 'New issue reported: Computer not booting', false, '2024-01-16 09:15:00'),
 
-((SELECT auth_id FROM user_profiles WHERE name = 'Dr. Sarah Miller'), 
- (SELECT auth_id FROM user_profiles WHERE name = 'Dr. Sarah Miller'),
- 'created', 'transfer', 
+((SELECT id FROM user_profiles WHERE name = 'Dr. Sarah Miller'),
+ (SELECT id FROM user_profiles WHERE name = 'Dr. Sarah Miller'),
+ 'created', 'transfer',
  (SELECT id FROM asset_transfers WHERE from_lab = (SELECT id FROM labs WHERE lab_identifier = 'MELAB01') LIMIT 1),
  'Asset Transfer', 'Asset transfer initiated: Logitech C920 HD Pro', false, '2024-01-17 14:20:00'),
 
-((SELECT auth_id FROM user_profiles WHERE name = 'Dr. Sarah Miller'), 
- (SELECT auth_id FROM user_profiles WHERE name = 'Dr. Sarah Miller'),
- 'login', 'system', 
+((SELECT id FROM user_profiles WHERE name = 'Dr. Sarah Miller'),
+ (SELECT id FROM user_profiles WHERE name = 'Dr. Sarah Miller'),
+ 'login', 'system',
  NULL,
- 'System', 'User logged in successfully', false, '2024-01-17 09:30:00');
+ 'System', 'User logged in successfully', false, '2024-01-17 09:30:00'),
+
+((SELECT id FROM user_profiles WHERE name = 'Mike Wilson'),
+ (SELECT id FROM user_profiles WHERE name = 'Mike Wilson'),
+ 'created', 'asset',
+ (SELECT id FROM assets WHERE name_of_supply = 'Lab Consumables Kit' LIMIT 1),
+ 'Lab Consumables Kit', 'New asset created: Lab Consumables Kit', false, '2024-02-15 10:00:00'),
+
+((SELECT id FROM user_profiles WHERE name = 'Dr. Lisa Brown'),
+ (SELECT id FROM user_profiles WHERE name = 'Mike Wilson'),
+ 'approved', 'asset',
+ (SELECT id FROM assets WHERE name_of_supply = 'Lab Consumables Kit' LIMIT 1),
+ 'Lab Consumables Kit', 'Asset approved: Lab Consumables Kit', false, '2024-02-15 11:30:00'),
+
+((SELECT id FROM user_profiles WHERE name = 'David Lee'),
+ (SELECT id FROM user_profiles WHERE name = 'David Lee'),
+ 'created', 'asset',
+ (SELECT id FROM assets WHERE name_of_supply = 'Arduino Uno R3' LIMIT 1),
+ 'Arduino Uno R3', 'New asset created: Arduino Uno R3', false, '2024-02-10 09:45:00'),
+
+((SELECT id FROM user_profiles WHERE name = 'Prof. Anna Garcia'),
+ (SELECT id FROM user_profiles WHERE name = 'David Lee'),
+ 'approved', 'asset',
+ (SELECT id FROM assets WHERE name_of_supply = 'Arduino Uno R3' LIMIT 1),
+ 'Arduino Uno R3', 'Asset approved: Arduino Uno R3', false, '2024-02-10 10:15:00'),
+
+((SELECT id FROM user_profiles WHERE name = 'James Taylor'),
+ (SELECT id FROM user_profiles WHERE name = 'James Taylor'),
+ 'created', 'asset',
+ (SELECT id FROM assets WHERE name_of_supply = 'Chemical Reagents Set' LIMIT 1),
+ 'Chemical Reagents Set', 'New asset created: Chemical Reagents Set', false, '2024-02-20 14:00:00'),
+
+((SELECT id FROM user_profiles WHERE name = 'Dr. Maria Rodriguez'),
+ (SELECT id FROM user_profiles WHERE name = 'James Taylor'),
+ 'approved', 'asset',
+ (SELECT id FROM assets WHERE name_of_supply = 'Chemical Reagents Set' LIMIT 1),
+ 'Chemical Reagents Set', 'Asset approved: Chemical Reagents Set', false, '2024-02-20 15:30:00');
+
+-- Insert sample deleted assets (asset_type references asset_types.id)
+INSERT INTO deleted_assets (
+  original_asset_id, sr_no, date, name_of_supply, asset_type, invoice_number,
+  description, rate, asset_id, remark, is_consumable, allocated_lab, created_by,
+  approved, approved_by, approved_at, approved_by_lab_incharge, approved_at_lab_incharge,
+  deleted_by, deleted_at, hod_approval, hod_approved_by, hod_approved_at,
+  restored, restored_at, restored_by, created_at, updated_at
+) VALUES
+(
+  (SELECT id FROM public.assets WHERE name_of_supply = 'Dell OptiPlex 7090' LIMIT 1),
+  1, '2024-04-01', 'Dell OptiPlex 7090',
+  (SELECT id FROM asset_types WHERE identifier = 'PC' LIMIT 1),
+  'INV-2024-001', 'Desktop Computer Intel i7, 16GB RAM, 512GB SSD',
+  75000.00, 'RSCOE/CSBS/CSLAB01/PC-1', 'Obsolete model', false,
+  (SELECT id FROM public.labs WHERE lab_identifier = 'CSLAB01'),
+  (SELECT id FROM public.user_profiles WHERE name = 'Alice Johnson'),
+  true, (SELECT id FROM public.user_profiles WHERE name = 'Dr. John Smith'),
+  '2024-04-01 10:00:00',
+  (SELECT id FROM public.user_profiles WHERE name = 'Prof. Robert Williams'),
+  '2024-04-01 11:00:00',
+  (SELECT id FROM public.user_profiles WHERE name = 'Dr. John Smith'),
+  '2024-04-02 09:00:00', false, NULL, NULL, false, NULL, NULL,
+  '2024-04-01 08:00:00', '2024-04-01 08:00:00'
+),
+(
+  (SELECT id FROM public.assets WHERE name_of_supply = 'HP LaserJet Pro M404dn' LIMIT 1),
+  2, '2024-04-03', 'HP LaserJet Pro M404dn',
+  (SELECT id FROM asset_types WHERE identifier = 'PR' LIMIT 1),
+  'INV-2024-002', 'Laser Printer Monochrome',
+  25000.00, 'RSCOE/CSBS/CSLAB01/PR-1', 'Broken printer', false,
+  (SELECT id FROM public.labs WHERE lab_identifier = 'CSLAB01'),
+  (SELECT id FROM public.user_profiles WHERE name = 'Alice Johnson'),
+  true, (SELECT id FROM public.user_profiles WHERE name = 'Dr. John Smith'),
+  '2024-04-03 10:00:00',
+  (SELECT id FROM public.user_profiles WHERE name = 'Prof. Robert Williams'),
+  '2024-04-03 11:00:00',
+  (SELECT id FROM public.user_profiles WHERE name = 'Dr. John Smith'),
+  '2024-04-04 09:00:00', false, NULL, NULL, false, NULL, NULL,
+  '2024-04-03 08:00:00', '2024-04-03 08:00:00'
+),
+(
+  (SELECT id FROM public.assets WHERE name_of_supply = 'Cisco Catalyst 2960-X' LIMIT 1),
+  3, '2024-04-05', 'Cisco Catalyst 2960-X',
+  (SELECT id FROM asset_types WHERE identifier = 'NW' LIMIT 1),
+  'INV-2024-003', 'Network Switch 48-port',
+  45000.00, 'RSCOE/CSBS/CSLAB01/NW-1', 'Outdated firmware', false,
+  (SELECT id FROM public.labs WHERE lab_identifier = 'CSLAB01'),
+  (SELECT id FROM public.user_profiles WHERE name = 'Alice Johnson'),
+  true, (SELECT id FROM public.user_profiles WHERE name = 'Dr. John Smith'),
+  '2024-04-05 10:00:00',
+  (SELECT id FROM public.user_profiles WHERE name = 'Prof. Robert Williams'),
+  '2024-04-05 11:00:00',
+  (SELECT id FROM public.user_profiles WHERE name = 'Dr. John Smith'),
+  '2024-04-06 09:00:00', false, NULL, NULL, false, NULL, NULL,
+  '2024-04-05 08:00:00', '2024-04-05 08:00:00'
+);
+
+-- ===================================================================
+-- END OF SCHEMA
+-- ===================================================================

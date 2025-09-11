@@ -1,10 +1,15 @@
 import React, { useEffect, useState } from 'react';
 import { LabService } from '../../lib/labService';
-import { Lab, CreateLabRequest, UpdateLabRequest } from '../../types/lab';
+import { Lab, CreateLabRequest, UpdateLabRequest } from '../../types/';
+import { UserProfile } from '../../types';
 import { useAuth } from '../../contexts/AuthContext';
 import { ListItemSkeleton } from '../Layout/LoadingSkeleton';
+import { Edit, Plus, Trash2 } from 'lucide-react';
 import Button from '../Button';
 import ConfirmationModal from '../Layout/ConfirmationModal';
+import EditUserModal from '../Users/EditUserModal';
+import DeleteUserModal from '../Users/DeleteUserModal';
+
 
 const LabManagementPage: React.FC = () => {
   const [labs, setLabs] = useState<Lab[]>([]);
@@ -19,6 +24,16 @@ const LabManagementPage: React.FC = () => {
     description: '',
     location: '',
     lab_identifier: '',
+    lab_assistant: {
+      name: '',
+      email: '',
+      password: '',
+    },
+    lab_incharge: {
+      name: '',
+      email: '',
+      password: '',
+    },
   });
 
   const [editLab, setEditLab] = useState<UpdateLabRequest>({
@@ -31,6 +46,12 @@ const LabManagementPage: React.FC = () => {
   const [showDeleteModal, setShowDeleteModal] = useState(false);
   const [labToDelete, setLabToDelete] = useState<string | null>(null);
   const [isDeleting, setIsDeleting] = useState(false);
+  const [labStaff, setLabStaff] = useState<{ [labId: string]: any[] }>({});
+  const [expandedLabs, setExpandedLabs] = useState<Set<string>>(new Set());
+  const [userToEdit, setUserToEdit] = useState<UserProfile | null>(null);
+  const [editModalOpen, setEditModalOpen] = useState(false);
+  const [userToDelete, setUserToDelete] = useState<UserProfile | null>(null);
+  const [deleteModalOpen, setDeleteModalOpen] = useState(false);
 
   const { profile } = useAuth();
 
@@ -38,6 +59,14 @@ const LabManagementPage: React.FC = () => {
     try {
       const fetchedLabs = await LabService.getLabs();
       setLabs(fetchedLabs);
+
+      // Fetch lab staff for each lab
+      const staffMap: { [labId: string]: any[] } = {};
+      for (const lab of fetchedLabs) {
+        const staff = await LabService.getLabStaff(lab.id);
+        staffMap[lab.id] = staff;
+      }
+      setLabStaff(staffMap);
     } catch (err) {
       const errorMessage = err instanceof Error ? err.message : 'Unknown error';
       setError(`Failed to fetch labs: ${errorMessage}`);
@@ -57,7 +86,14 @@ const LabManagementPage: React.FC = () => {
     try {
       await LabService.createLab(newLab);
       setShowCreateForm(false);
-      setNewLab({ name: '', description: '', location: '', lab_identifier: '' });
+      setNewLab({
+        name: '',
+        description: '',
+        location: '',
+        lab_identifier: '',
+        lab_assistant: { name: '', email: '', password: '' },
+        lab_incharge: { name: '', email: '', password: '' }
+      });
       fetchLabs();
     } catch (err) {
       const errorMessage = err instanceof Error ? err.message : 'Unknown error';
@@ -113,6 +149,52 @@ const LabManagementPage: React.FC = () => {
     setEditLab({ name: '', description: '', location: '', lab_identifier: '' });
   };
 
+
+
+  const openEditModal = (user: UserProfile) => {
+    setUserToEdit(user);
+    setEditModalOpen(true);
+  };
+
+  const closeEditModal = () => {
+    setUserToEdit(null);
+    setEditModalOpen(false);
+  };
+
+  const openDeleteModal = (user: UserProfile) => {
+    setUserToDelete(user);
+    setDeleteModalOpen(true);
+  };
+
+  const closeDeleteModal = () => {
+    setUserToDelete(null);
+    setDeleteModalOpen(false);
+  };
+
+  const handleUserUpdated = () => {
+    fetchLabs();
+    closeEditModal();
+  };
+
+  const handleUserDeleted = () => {
+    fetchLabs();
+    closeDeleteModal();
+  };
+
+  const toggleLabExpansion = (labId: string) => {
+    setExpandedLabs(prev => {
+      const newSet = new Set(prev);
+      if (newSet.has(labId)) {
+        newSet.delete(labId);
+      } else {
+        newSet.add(labId);
+      }
+      return newSet;
+    });
+  };
+
+
+
   if (loading) {
     return (
       <div className="p-6">
@@ -135,7 +217,8 @@ const LabManagementPage: React.FC = () => {
         <h2 className="text-2xl font-bold text-gray-900 dark:text-white">Lab Management</h2>
         {profile?.role === 'HOD' && !showCreateForm && (
           <Button onClick={() => setShowCreateForm(true)} variant="primary" size="md">
-            Create Lab
+            <Plus className='w-4 h-4' />
+            <span>Create Lab</span>
           </Button>
         )}
       </div>
@@ -148,7 +231,7 @@ const LabManagementPage: React.FC = () => {
           </h3>
           {['name', 'description', 'location', 'lab_identifier'].map(field => (
             <input
-              key={field}
+              key={`create-${field}`}
               type="text"
               placeholder={field.replace('_', ' ').replace(/\b\w/g, l => l.toUpperCase())}
               value={(newLab as any)[field]}
@@ -156,6 +239,74 @@ const LabManagementPage: React.FC = () => {
               className="border p-2 rounded mb-2 w-full dark:bg-gray-700 dark:text-white"
             />
           ))}
+
+          <h4 className="text-md font-semibold mt-4 mb-2 text-gray-900 dark:text-white">
+            Lab Assistant Details
+          </h4>
+          <input
+            type="text"
+            placeholder="Lab Assistant Name"
+            value={newLab.lab_assistant?.name || ''}
+            onChange={e => setNewLab({
+              ...newLab,
+              lab_assistant: { ...newLab.lab_assistant!, name: e.target.value }
+            })}
+            className="border p-2 rounded mb-2 w-full dark:bg-gray-700 dark:text-white"
+          />
+          <input
+            type="email"
+            placeholder="Lab Assistant Email"
+            value={newLab.lab_assistant?.email || ''}
+            onChange={e => setNewLab({
+              ...newLab,
+              lab_assistant: { ...newLab.lab_assistant!, email: e.target.value }
+            })}
+            className="border p-2 rounded mb-2 w-full dark:bg-gray-700 dark:text-white"
+          />
+          <input
+            type="password"
+            placeholder="Lab Assistant Password"
+            value={newLab.lab_assistant?.password || ''}
+            onChange={e => setNewLab({
+              ...newLab,
+              lab_assistant: { ...newLab.lab_assistant!, password: e.target.value }
+            })}
+            className="border p-2 rounded mb-2 w-full dark:bg-gray-700 dark:text-white"
+          />
+
+          <h4 className="text-md font-semibold mt-4 mb-2 text-gray-900 dark:text-white">
+            Lab Incharge Details
+          </h4>
+          <input
+            type="text"
+            placeholder="Lab Incharge Name"
+            value={newLab.lab_incharge?.name || ''}
+            onChange={e => setNewLab({
+              ...newLab,
+              lab_incharge: { ...newLab.lab_incharge!, name: e.target.value }
+            })}
+            className="border p-2 rounded mb-2 w-full dark:bg-gray-700 dark:text-white"
+          />
+          <input
+            type="email"
+            placeholder="Lab Incharge Email"
+            value={newLab.lab_incharge?.email || ''}
+            onChange={e => setNewLab({
+              ...newLab,
+              lab_incharge: { ...newLab.lab_incharge!, email: e.target.value }
+            })}
+            className="border p-2 rounded mb-2 w-full dark:bg-gray-700 dark:text-white"
+          />
+          <input
+            type="password"
+            placeholder="Lab Incharge Password"
+            value={newLab.lab_incharge?.password || ''}
+            onChange={e => setNewLab({
+              ...newLab,
+              lab_incharge: { ...newLab.lab_incharge!, password: e.target.value }
+            })}
+            className="border p-2 rounded mb-2 w-full dark:bg-gray-700 dark:text-white"
+          />
           <div className="flex space-x-2">
 
             <Button
@@ -189,7 +340,7 @@ const LabManagementPage: React.FC = () => {
                 </h3>
                 {['name', 'description', 'location'].map(field => (
                   <input
-                    key={field}
+                    key={`edit-${field}`}
                     type="text"
                     placeholder={field}
                     value={(editLab as any)[field]}
@@ -215,27 +366,90 @@ const LabManagementPage: React.FC = () => {
               </div>
             ) : (
               <div>
-                <h3 className="font-medium text-lg text-gray-900 dark:text-white">{lab.name}</h3>
-                <p className="text-sm text-gray-600 dark:text-gray-300">{lab.description}</p>
-                <p className="text-sm text-gray-500 dark:text-gray-400">Location: {lab.location}</p>
-                <p className="text-sm text-gray-500 dark:text-gray-400">
-                  Identifier: {lab.lab_identifier}
-                </p>
-                {profile?.role === 'HOD' && (
-                  <div className="flex space-x-2 mt-2">
-                    <Button onClick={() => startEditingLab(lab)} variant="warning" size="sm">
-                      Edit
-                    </Button>
-                    <Button
-                      onClick={() => {
-                        setShowDeleteModal(true);
-                        setLabToDelete(lab.id);
-                      }}
-                      variant="danger"
-                      size="sm"
+                {/* Lab Header with Expand/Collapse Button */}
+                <div className="flex items-center justify-between mb-2">
+                  <div>
+                    <h3 className="font-medium text-lg text-gray-900 dark:text-white">{lab.name}</h3>
+                    <p className="text-sm text-gray-600 dark:text-gray-300">{lab.description}</p>
+                    <p className="text-sm text-gray-500 dark:text-gray-400">Location: {lab.location}</p>
+                    <p className="text-sm text-gray-500 dark:text-gray-400">
+                      Identifier: {lab.lab_identifier}
+                    </p>
+                  </div>
+                  <div className="flex items-center space-x-2">
+                    <button
+                      onClick={() => toggleLabExpansion(lab.id)}
+                      className="text-gray-500 hover:text-gray-700 dark:text-gray-400 dark:hover:text-gray-200 p-1 rounded hover:bg-gray-100 dark:hover:bg-gray-700 transition-colors"
+                      title={expandedLabs.has(lab.id) ? 'Collapse staff section' : 'Expand staff section'}
                     >
-                      Delete
-                    </Button>
+                      {expandedLabs.has(lab.id) ? (
+                        <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+                        </svg>
+                      ) : (
+                        <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
+                        </svg>
+                      )}
+                    </button>
+                    {profile?.role === 'HOD' && (
+                      <div className="flex space-x-1">
+                        <Button onClick={() => startEditingLab(lab)} variant="edit" size="sm">
+                          <Edit></Edit>
+                        </Button>
+                        <Button
+                          onClick={() => {
+                            setShowDeleteModal(true);
+                            setLabToDelete(lab.id);
+                          }}
+                          variant="trash"
+                          size="sm"
+                        >
+                          <Trash2></Trash2>
+                        </Button>
+                      </div>
+                    )}
+                  </div>
+                </div>
+
+                {/* Expandable Lab Staff Section */}
+                {expandedLabs.has(lab.id) && (
+                  <div className="mt-3 border-t border-gray-200 dark:border-gray-600 pt-3">
+                    <h4 className="text-sm font-medium text-gray-900 dark:text-white mb-2">Lab Staff:</h4>
+                    {labStaff[lab.id]?.length > 0 ? (
+                      <div className="space-y-2">
+                        {labStaff[lab.id].map((staff: any, index: number) => (
+                          <div key={`${staff.id}-${index}`} className="flex items-center justify-between bg-gray-50 dark:bg-gray-700 p-2 rounded">
+                            <div>
+                              <p className="text-sm font-medium text-gray-900 dark:text-white">
+                                {staff.name} ({staff.role})
+                              </p>
+                              <p className="text-xs text-gray-500 dark:text-gray-400">
+                                {staff.email}
+                              </p>
+                            </div>
+                            <div className="flex space-x-1">
+                              <Button
+                                onClick={() => openEditModal(staff)}
+                                variant="edit"
+                                size="sm"
+                              >
+                                <Edit></Edit>
+                              </Button>
+                              <Button
+                                onClick={() => openDeleteModal(staff)}
+                                variant="trash"
+                                size="sm"
+                              >
+                                <Trash2></Trash2>
+                              </Button>
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    ) : (
+                      <p className="text-sm text-gray-500 dark:text-gray-400">No staff assigned</p>
+                    )}
                   </div>
                 )}
               </div>
@@ -259,6 +473,22 @@ const LabManagementPage: React.FC = () => {
         type="delete"
         isLoading={isDeleting}
         destructive
+      />
+
+      {/* Edit User Modal */}
+      <EditUserModal
+        isOpen={editModalOpen}
+        onClose={closeEditModal}
+        user={userToEdit}
+        onUserUpdated={handleUserUpdated}
+      />
+
+      {/* Delete User Modal */}
+      <DeleteUserModal
+        isOpen={deleteModalOpen}
+        onClose={closeDeleteModal}
+        user={userToDelete}
+        onUserDeleted={handleUserDeleted}
       />
     </div>
   );

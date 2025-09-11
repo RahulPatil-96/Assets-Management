@@ -365,9 +365,9 @@ const Dashboard: React.FC<DashboardProps> = ({ onNavigate }) => {
               </h2>
               {stats?.recentActivities && stats.recentActivities.length > 0 ? (
                 <div className='max-h-64 overflow-y-auto space-y-3'>
-                  {stats.recentActivities.map(activity => (
+                  {stats.recentActivities.map((activity, index) => (
                     <div
-                      key={activity.id}
+                      key={activity.id || `activity-${index}`}
                       className='flex items-start space-x-3 p-3 rounded-lg bg-gray-50 dark:bg-gray-700/50'
                     >
                       <div className='flex-shrink-0'>

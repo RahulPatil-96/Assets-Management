@@ -101,6 +101,18 @@ const AssetDetailsModal: React.FC<AssetDetailsModalProps> = ({ asset, onClose })
                   <span className='font-medium'>Type:</span> {asset.asset_type}
                 </p>
                 <p className='text-sm'>
+                  <span className='font-medium'>Category:</span>
+                  <span
+                    className={`ml-2 px-2 py-1 rounded-full text-xs ${
+                      asset.is_consumable
+                        ? 'bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-200'
+                        : 'bg-blue-100 text-blue-800 dark:bg-blue-900 dark:text-blue-200'
+                    }`}
+                  >
+                    {asset.is_consumable ? 'Consumable' : 'Non-Consumable'}
+                  </span>
+                </p>
+                <p className='text-sm'>
                   <span className='font-medium'>Lab: </span>
                   {loadingLab ? (
                     <span className='text-gray-400'>Loading lab name...</span>
@@ -127,11 +139,11 @@ const AssetDetailsModal: React.FC<AssetDetailsModalProps> = ({ asset, onClose })
                 Financial Details
               </h3>
               <div className='space-y-1'>
-                <p className='text-sm'>
+                {/* <p className='text-sm'>
                   <span className='font-medium'>Rate:</span> ₹{asset.rate}
-                </p>
+                </p> */}
                 <p className='text-sm'>
-                  <span className='font-medium'>Total Amount:</span> ₹{asset.total_amount}
+                  <span className='font-medium'>Cost:</span> ₹{asset.total_amount}
                 </p>
               </div>
             </div>
